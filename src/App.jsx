@@ -3,18 +3,27 @@ import "./App.css";
 import BpmFilter from "./BpmFilter";
 import GenreFilter from "./GenreFilter";
 import SongList from "./SongList";
-import songs from "./data/songs";
+import songsData from "./data/songs";
 
-const genres = ["All", ...new Set(songs.map((song) => song.genre))];
+const genres = ["All", ...new Set(songsData.map((song) => song.genre))];
 
 function App() {
   const [minBpm, setMinBpm] = useState(100);
   const [maxBpm, setMaxBpm] = useState(140);
   const [selectedGenre, setSelectedGenre] = useState("All");
+  const [songs, setSongs] = useState(songsData);
+
+  const handleRating = (id, rating) => {
+    console.log("handleRating called:", id, rating);
+    setSongs((prev) =>
+      prev.map((song) => (song.id === id ? { ...song, rating } : song)),
+    );
+  };
 
   const filteredSongs = songs
     .filter((song) => song.bpm >= minBpm && song.bpm <= maxBpm)
     .filter((song) => selectedGenre === "All" || song.genre === selectedGenre)
+    .slice()
     .sort((a, b) => a.bpm - b.bpm);
 
   return (
@@ -35,8 +44,7 @@ function App() {
         {selectedGenre === "All" ? "全ジャンル" : selectedGenre} / BPM {minBpm}
         〜{maxBpm}
       </h2>
-      <SongList songs={filteredSongs} />
-      {filteredSongs.length === 0 && <p>該当する曲がありません</p>}
+      <SongList songs={filteredSongs} onRating={handleRating} />
     </div>
   );
 }

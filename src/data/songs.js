@@ -1,20 +1,43 @@
 const songs = [
-  { id: 1, title: "Shape of You", artist: "Ed Sheeran", bpm: 96, genre: "Pop" },
+  {
+    id: 1,
+    title: "Shape of You",
+    artist: "Ed Sheeran",
+    bpm: 96,
+    genre: "Pop",
+    rating: null,
+  },
   {
     id: 2,
     title: "Blinding Lights",
     artist: "the Weeknd",
     bpm: 171,
     genre: "Pop",
+    rating: null,
   },
-  { id: 3, title: "Levitating", artist: "Dua Lipa", bpm: 103, genre: "Pop" },
-  { id: 4, title: "Bad Guy", artist: "Billie Eilish", bpm: 135, genre: "Pop" },
+  {
+    id: 3,
+    title: "Levitating",
+    artist: "Dua Lipa",
+    bpm: 103,
+    genre: "Pop",
+    rating: null,
+  },
+  {
+    id: 4,
+    title: "Bad Guy",
+    artist: "Billie Eilish",
+    bpm: 135,
+    genre: "Pop",
+    rating: null,
+  },
   {
     id: 5,
     title: "Uptown Funk",
     artist: "Bruno Mars",
     bpm: 115,
     genre: "Funk",
+    rating: null,
   },
   {
     id: 6,
@@ -22,6 +45,7 @@ const songs = [
     artist: "Eminem",
     bpm: 171,
     genre: "HipHop",
+    rating: null,
   },
   {
     id: 7,
@@ -29,6 +53,7 @@ const songs = [
     artist: "Kendrick Lamer",
     bpm: 150,
     genre: "HipHop",
+    rating: null,
   },
   {
     id: 8,
@@ -36,6 +61,7 @@ const songs = [
     artist: "Davie Guetta",
     bpm: 126,
     genre: "EDM",
+    rating: null,
   },
   {
     id: 9,
@@ -43,6 +69,7 @@ const songs = [
     artist: "Zedd",
     bpm: 128,
     genre: "EDM",
+    rating: null,
   },
   {
     id: 10,
@@ -50,6 +77,7 @@ const songs = [
     artist: "Avicii",
     bpm: 124,
     genre: "EDM",
+    rating: null,
   },
 ];
 
