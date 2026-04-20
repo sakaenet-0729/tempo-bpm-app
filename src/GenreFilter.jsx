@@ -1,23 +1,20 @@
 function GenreFilter({ genres, selectedGenre, onGenreChange }) {
   return (
-    <div className="genre-filter">
-      {genres.map((genre) => (
-        <button
-          key={genre}
-          onClick={() => onGenreChange(genre)}
-          style={{
-            backgroundColor: selectedGenre === genre ? "#333" : "#eee",
-            color: selectedGenre === genre ? "#fff" : "#333",
-            margin: "4px",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          {genre}
-        </button>
-      ))}
+    <div className="glass-card">
+      <p className="section-label">GENRE</p>
+      <div className="genre-filter">
+        {genres.map((genre) => (
+          <button
+            key={genre}
+            onClick={() => onGenreChange(genre)}
+            className={`genre-btn ${selectedGenre === genre ? "active" : ""}`}
+          >
+            {genre}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
+
 export default GenreFilter;
