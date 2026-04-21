@@ -48,21 +48,24 @@ function App() {
 
     const tracks = await searchTracks(searchQuery, token);
 
-    const results = await Promise.all(
-      tracks.map(async (track) => {
-        const bpm = await getTrackBpm(track.id, token);
-        return {
-          id: track.id,
-          title: track.name,
-          artist: track.artists[0].name,
-          bpm: bpm,
-          image: track.album.images[2]?.url,
-          rating: null,
-        };
-      }),
-    );
+    const results = tracks.map((track) => ({
+      id: track.id,
+      title: track.name,
+      artist: track.artists[0].name,
+      bpm: null,
+      image: track.album.images[2]?.url,
+      rating: null,
+    }));
     setSearchResults(results);
     setIsSearching(false);
+
+    //BPMを後から取得して更新
+    for (const result of results) {
+      const bpm = await getTrackBpm(result.title, result.artist);
+      setSearchResults((prev) =>
+        prev.map((s) => (s.id === result.id ? { ...s, bpm } : s)),
+      );
+    }
   };
 
   const handleRating = (id, rating) => {
@@ -158,7 +161,7 @@ function App() {
                     </button>
                   </div>
                   <span className="song-bpm-badge match-perfect">
-                    {song.bpm}
+                    {song.bpm ? song.bpm : "..."}
                   </span>
                 </div>
               </li>

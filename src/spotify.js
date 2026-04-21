@@ -105,14 +105,18 @@ export async function searchTracks(query, token) {
   return data.tracks.items;
 }
 
-export async function getTrackBpm(trackId, token) {
-  // 特定の曲のBPM情報をSpotifyに聞く
+export async function getTrackBpm(trackName, artistName) {
+  const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
+
   const response = await fetch(
-    `https://api.spotify.com/v1/audio-features/${trackId}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    },
+    `https://api.getsong.co/search/?api_key=${API_KEY}&type=both&lookup=song:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}`,
   );
+
   const data = await response.json();
-  return Math.round(data.tempo);
+
+  if (data.search && data.search.length > 0) {
+    return Number(data.search[0].tempo);
+  }
+
+  return null;
 }
