@@ -121,6 +121,7 @@ body {
   background: #00d672;
   border-radius: 2px;
   pointer-events: none;
+  z-index: 9999;
 }
 
 .range-slider input[type="range"] {
@@ -372,4 +373,41 @@ body {
 
 .nav-icon {
   font-size: 20px;
+}
+
+.search-box {
+  display: flex;
+  gap: 8px;
+}
+
+.search-box input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  color: #1a1a2e;
+  outline: none;
+}
+
+.search-box input::placeholder {
+  color: #aaa;
+}
+
+.search-box input:focus {
+  border-color: #00d672;
+}
+
+.search-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #00d672;
+  color: #fff;
+  font-size: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
 }
