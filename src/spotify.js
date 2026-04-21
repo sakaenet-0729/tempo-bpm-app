@@ -113,6 +113,7 @@ export async function getTrackBpm(trackName, artistName) {
   );
 
   const data = await response.json();
+  console.log("BPM search:", trackName, artistName, data);
 
   if (data.search && data.search.length > 0) {
     return Number(data.search[0].tempo);
