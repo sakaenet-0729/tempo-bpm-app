@@ -118,9 +118,9 @@ export async function getTrackBpm(trackName, artistName) {
   if (data.search && Array.isArray(data.search) && data.search.length > 0) {
     const tempos = data.search
       .map((s) => Number(s.tempo))
-      .filter((t) => t > 40 && t < 250);
+      .filter((t) => t > 0 && t < 300);
     if (tempos.length > 0) {
-      return Math.max(...tempos);
+      return tempos[0];
     }
   }
 
@@ -133,9 +133,9 @@ export async function getTrackBpm(trackName, artistName) {
   if (data.search && Array.isArray(data.search) && data.search.length > 0) {
     const tempos = data.search
       .map((s) => Number(s.tempo))
-      .filter((t) => t > 40 && t < 250);
+      .filter((t) => t > 0 && t < 300);
     if (tempos.length > 0) {
-      return Math.max(...tempos);
+      return tempos[0];
     }
   }
   return null;
