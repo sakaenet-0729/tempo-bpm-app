@@ -3,7 +3,11 @@
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
 // ログイン後にSpotifyが「ここに戻ってね」って送り返すURL
 // Dashboardに登録したのと同じじゃないとエラーになる（さっき体験した）
-const REDIRECT_URI = "http://127.0.0.1:5173/callback";
+const REDIRECT_URI =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://127.0.0.1:5173/callback"
+    : `${window.location.origin}/callback`;
 // 「このアプリがアクセスしたい範囲」を指定
 // 今はユーザーの基本情報だけ。曲検索は指定なしでもできる
 const SCOPES =
