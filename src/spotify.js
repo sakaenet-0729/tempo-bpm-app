@@ -6,7 +6,8 @@ const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
 const REDIRECT_URI = "http://127.0.0.1:5173/callback";
 // 「このアプリがアクセスしたい範囲」を指定
 // 今はユーザーの基本情報だけ。曲検索は指定なしでもできる
-const SCOPES = "user-read-private user-read-email";
+const SCOPES =
+  "user-read-private user-read-email user-library-read playlist-read-private";
 
 function generateRandomString(length) {
   // ランダムな文字列を作る
@@ -108,16 +109,43 @@ export async function searchTracks(query, token) {
 export async function getTrackBpm(trackName, artistName) {
   const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
 
-  const response = await fetch(
+  // まず曲名+アーティスト名（日本語かも）で検索
+  let response = await fetch(
     `https://api.getsong.co/search/?api_key=${API_KEY}&type=both&lookup=song:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}`,
   );
+  let data = await response.json();
 
-  const data = await response.json();
-  console.log("BPM search:", trackName, artistName, data);
-
-  if (data.search && data.search.length > 0) {
-    return Number(data.search[0].tempo);
+  if (data.search && Array.isArray(data.search) && data.search.length > 0) {
+    const tempos = data.search
+      .map((s) => Number(s.tempo))
+      .filter((t) => t > 40 && t < 250);
+    if (tempos.length > 0) {
+      return Math.max(...tempos);
+    }
   }
 
+  // ヒットしなかったら曲名だけで再検索
+  response = await fetch(
+    `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=${encodeURIComponent(trackName)}`,
+  );
+  data = await response.json();
+
+  if (data.search && Array.isArray(data.search) && data.search.length > 0) {
+    const tempos = data.search
+      .map((s) => Number(s.tempo))
+      .filter((t) => t > 40 && t < 250);
+    if (tempos.length > 0) {
+      return Math.max(...tempos);
+    }
+  }
   return null;
+}
+
+export async function getMyTracks(token, offset = 0) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = await response.json();
+  return data;
 }
