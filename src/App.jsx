@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import BpmFilter from "./BpmFilter";
-import GenreFilter from "./GenreFilter";
-import SongList from "./SongList";
-import songsData from "./data/songs";
 import {
   loginWithSpotify,
   getAccessToken,
@@ -11,14 +8,9 @@ import {
   getTrackBpm,
 } from "./spotify";
 
-const genres = ["All", ...new Set(songsData.map((song) => song.genre))];
-
 function App() {
-  const [minBpm, setMinBpm] = useState(100);
-  const [maxBpm, setMaxBpm] = useState(140);
-  const [selectedGenre, setSelectedGenre] = useState("All");
-  const [songs, setSongs] = useState(songsData);
-  const [ratingFilter, setRatingFilter] = useState("all");
+  const [minBpm, setMinBpm] = useState(60);
+  const [maxBpm, setMaxBpm] = useState(200);
   const [token, setToken] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -27,13 +19,11 @@ function App() {
   useEffect(() => {
     async function fetchToken() {
       const accessToken = await getAccessToken();
-      console.log("token:", accessToken);
       if (accessToken) {
         setToken(accessToken);
       }
     }
 
-    // localStorageに既にトークンがあればそれを使う
     const saved = localStorage.getItem("spotify_token");
     if (saved) {
       setToken(saved);
@@ -59,7 +49,6 @@ function App() {
     setSearchResults(results);
     setIsSearching(false);
 
-    //BPMを後から取得して更新
     for (const result of results) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
@@ -69,29 +58,21 @@ function App() {
   };
 
   const handleRating = (id, rating) => {
-    setSongs((prev) =>
-      prev.map((song) => (song.id === id ? { ...song, rating } : song)),
-    );
-  };
-
-  const handleSearchRating = (id, rating) => {
     setSearchResults((prev) =>
       prev.map((song) => (song.id === id ? { ...song, rating } : song)),
     );
   };
 
-  const filteredSongs = songs
-    .filter((song) => song.bpm >= minBpm && song.bpm <= maxBpm)
-    .filter((song) => selectedGenre === "All" || song.genre === selectedGenre)
+  const filteredResults = searchResults
     .filter((song) => {
-      if (ratingFilter === "all") return true;
-      if (ratingFilter === "good") return song.rating === "good";
-      if (ratingFilter === "bad") return song.rating === "bad";
-      if (ratingFilter === "unrated") return song.rating === null;
-      return true;
+      if (song.bpm === null) return true;
+      return song.bpm >= minBpm && song.bpm <= maxBpm;
     })
-    .slice()
-    .sort((a, b) => a.bpm - b.bpm);
+    .sort((a, b) => {
+      if (a.bpm === null) return 1;
+      if (b.bpm === null) return -1;
+      return a.bpm - b.bpm;
+    });
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
@@ -130,9 +111,21 @@ function App() {
 
       {searchResults.length > 0 && (
         <>
-          <p className="section-label">{searchResults.length} RESULTS</p>
+          <div className="bpm-display">
+            <span className="bpm-value">{targetBpm}</span>
+            <span className="bpm-label">BPM</span>
+          </div>
+
+          <BpmFilter
+            minBpm={minBpm}
+            maxBpm={maxBpm}
+            onMinChange={setMinBpm}
+            onMaxChange={setMaxBpm}
+          />
+
+          <p className="section-label">{filteredResults.length} TRACKS</p>
           <ul className="song-list">
-            {searchResults.map((song) => (
+            {filteredResults.map((song) => (
               <li key={song.id} className="song-item">
                 {song.image && (
                   <img
@@ -149,13 +142,13 @@ function App() {
                   <div className="rating-buttons">
                     <button
                       className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
-                      onClick={() => handleSearchRating(song.id, "good")}
+                      onClick={() => handleRating(song.id, "good")}
                     >
                       👍
                     </button>
                     <button
                       className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
-                      onClick={() => handleSearchRating(song.id, "bad")}
+                      onClick={() => handleRating(song.id, "bad")}
                     >
                       👎
                     </button>
@@ -169,49 +162,6 @@ function App() {
           </ul>
         </>
       )}
-
-      <div className="bpm-display">
-        <span className="bpm-value">{targetBpm}</span>
-        <span className="bpm-label">BPM</span>
-      </div>
-
-      <BpmFilter
-        minBpm={minBpm}
-        maxBpm={maxBpm}
-        onMinChange={setMinBpm}
-        onMaxChange={setMaxBpm}
-      />
-
-      <GenreFilter
-        genres={genres}
-        selectedGenre={selectedGenre}
-        onGenreChange={setSelectedGenre}
-      />
-
-      <div className="glass-card">
-        <p className="section-label">FILTER BY RATING</p>
-        <div className="genre-filter">
-          {["all", "good", "bad", "unrated"].map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setRatingFilter(filter)}
-              className={`genre-btn ${ratingFilter === filter ? "active" : ""}`}
-            >
-              {filter === "all" && "全て"}
-              {filter === "good" && "👍 いい"}
-              {filter === "bad" && "👎 微妙"}
-              {filter === "unrated" && "未評価"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <p className="section-label">{filteredSongs.length} TRACKS</p>
-      <SongList
-        songs={filteredSongs}
-        onRating={handleRating}
-        targetBpm={targetBpm}
-      />
 
       <div className="bottom-nav">
         <button className="nav-item">
