@@ -111,14 +111,19 @@ export async function searchTracks(query, token) {
 }
 
 export async function getMyPlaylists(token) {
-  const response = await fetch(
-    "https://api.spotify.com/v1/me/playlists?limit=50",
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    },
-  );
-  const data = await response.json();
-  return data.items;
+  try {
+    const response = await fetch(
+      "https://api.spotify.com/v1/me/playlists?limit=50",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.items || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function getPlaylistTracks(playlistId, token) {
@@ -173,31 +178,50 @@ export async function getTrackBpm(trackName, artistName) {
 }
 
 export async function getMyTracks(token, offset = 0) {
-  const response = await fetch(
-    `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const data = await response.json();
-  return data;
+  try {
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) return { items: [] };
+    const data = await response.json();
+    return data;
+  } catch {
+    return { items: [] };
+  }
 }
 
 export async function searchByBpm(bpm) {
   const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
 
-  const response = await fetch(
-    `https://api.getsong.co/tempo/?api_key=${API_KEY}&bpm=${bpm}`,
-  );
-  const data = await response.json();
+  const bpmValues = [bpm - 10, bpm, bpm + 10];
+  let allResults = [];
 
-  if (data.tempo && Array.isArray(data.tempo)) {
-    return data.tempo.map((song) => ({
+  for (const b of bpmValues) {
+    const response = await fetch(
+      `https://api.getsong.co/tempo/?api_key=${API_KEY}&bpm=${b}`,
+    );
+    const data = await response.json();
+    if (data.tempo && Array.isArray(data.tempo)) {
+      allResults = [...allResults, ...data.tempo];
+    }
+  }
+
+  const unique = allResults.filter(
+    (song, index, self) =>
+      self.findIndex((s) => s.song_id === song.song_id) === index,
+  );
+
+  return unique
+    .map((song) => ({
       id: song.song_id,
       title: song.song_title,
       artist: song.artist?.name || "Unknown",
       bpm: Number(song.tempo),
+      genre: song.artist?.genres?.[0] || "Other",
       image: null,
       rating: null,
-    }));
-  }
-  return [];
+    }))
+    .filter((song) => song.bpm >= bpm - 20 && song.bpm <= bpm + 20)
+    .sort((a, b) => Math.abs(a.bpm - bpm) - Math.abs(b.bpm - bpm));
 }
