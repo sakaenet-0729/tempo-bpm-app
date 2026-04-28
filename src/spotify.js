@@ -11,7 +11,7 @@ const REDIRECT_URI =
 // 「このアプリがアクセスしたい範囲」を指定
 // 今はユーザーの基本情報だけ。曲検索は指定なしでもできる
 const SCOPES =
-  "user-read-private user-read-email user-library-read playlist-read-private";
+  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative";
 
 function generateRandomString(length) {
   // ランダムな文字列を作る
@@ -108,6 +108,33 @@ export async function searchTracks(query, token) {
   );
   const data = await response.json();
   return data.tracks.items;
+}
+
+export async function getMyPlaylists(token) {
+  const response = await fetch(
+    "https://api.spotify.com/v1/me/playlists?limit=50",
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  const data = await response.json();
+  return data.items;
+}
+
+export async function getPlaylistTracks(playlistId, token) {
+  try {
+    const response = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.items?.items || data.tracks?.items || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function getTrackBpm(trackName, artistName) {

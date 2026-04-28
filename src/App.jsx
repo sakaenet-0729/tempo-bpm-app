@@ -6,6 +6,9 @@ import {
   getAccessToken,
   searchTracks,
   getTrackBpm,
+  getMyTracks,
+  getMyPlaylists,
+  getPlaylistTracks,
 } from "./spotify";
 
 function App() {
@@ -15,6 +18,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [libraryTracks, setLibraryTracks] = useState([]);
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [mode, setMode] = useState("search");
 
   useEffect(() => {
     async function fetchToken() {
@@ -31,6 +37,71 @@ function App() {
       fetchToken();
     }
   }, []);
+
+  // トークンが取れたらライブラリ取得
+  useEffect(() => {
+    async function fetchLibrary() {
+      if (token) {
+        // いいねした曲を取得
+        const likedData = await getMyTracks(token);
+        const likedTracks = likedData.items
+          .filter((item) => item.track)
+          .map((item) => ({
+            id: item.track.id,
+            title: item.track.name,
+            artist: item.track.artists[0].name,
+            bpm: null,
+            image: item.track.album.images[2]?.url,
+            rating: null,
+          }));
+
+        // プレイリストの曲を取得
+        const playlists = await getMyPlaylists(token);
+        let playlistTracks = [];
+        for (const pl of playlists) {
+          const items = await getPlaylistTracks(pl.id, token);
+          const tracks = items
+            .filter((item) => item.track || item.item)
+            .map((item) => {
+              const t = item.track || item.item;
+              return {
+                id: t.id,
+                title: t.name,
+                artist: t.artists[0].name,
+                bpm: null,
+                image: t.album.images[2]?.url,
+                rating: null,
+              };
+            });
+          playlistTracks = [...playlistTracks, ...tracks];
+        }
+
+        // 重複を除去して統合
+        const allTracks = [...likedTracks, ...playlistTracks];
+        const unique = allTracks.filter(
+          (track, index, self) =>
+            self.findIndex((t) => t.id === track.id) === index,
+        );
+
+        setLibraryTracks(unique);
+
+        // BPMを取得
+        for (const track of unique) {
+          const bpm = await getTrackBpm(track.title, track.artist);
+          setLibraryTracks((prev) =>
+            prev.map((s) => (s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s)),
+          );
+        }
+      }
+    }
+    fetchLibrary();
+  }, [token]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("spotify_token");
+    setToken(null);
+    setSearchResults([]);
+  };
 
   const handleSearch = async () => {
     if (!searchQuery || !token) return;
@@ -52,7 +123,35 @@ function App() {
     for (const result of results) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
-        prev.map((s) => (s.id === result.id ? { ...s, bpm } : s)),
+        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
+      );
+    }
+  };
+
+  const handlePlaylistSelect = async (playlist) => {
+    setSelectedPlaylist(playlist);
+    setIsSearching(true);
+
+    const items = await getPlaylistTracks(playlist.id, token);
+
+    const results = items
+      .filter((item) => item.track)
+      .map((item) => ({
+        id: item.track.id,
+        title: item.track.name,
+        artist: item.track.artists[0].name,
+        bpm: null,
+        image: item.track.album.images[2]?.url,
+        rating: null,
+      }));
+
+    setPlaylistTracks(results);
+    setIsSearching(false);
+
+    for (const result of results) {
+      const bpm = await getTrackBpm(result.title, result.artist);
+      setPlaylistTracks((prev) =>
+        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
       );
     }
   };
@@ -74,6 +173,27 @@ function App() {
       return a.bpm - b.bpm;
     });
 
+  const filteredLibraryTracks = libraryTracks
+    .filter((song) => {
+      if (libraryQuery) {
+        const q = libraryQuery.toLowerCase();
+        return (
+          song.title.toLowerCase().includes(q) ||
+          song.artist.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    })
+    .filter((song) => {
+      if (song.bpm === null || song.bpm === 0) return true;
+      return song.bpm >= minBpm && song.bpm <= maxBpm;
+    })
+    .sort((a, b) => {
+      if (a.bpm === null || a.bpm === 0) return 1;
+      if (b.bpm === null || b.bpm === 0) return -1;
+      return a.bpm - b.bpm;
+    });
+
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
   return (
@@ -85,31 +205,78 @@ function App() {
             Spotifyログイン
           </button>
         ) : (
-          <span style={{ color: "#00d672", fontSize: "13px" }}>● 接続済み</span>
-        )}
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#00d672",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            ● 接続済み（ログアウト）
+          </button>
+        )}{" "}
       </div>
 
       {token && (
-        <div className="glass-card">
-          <p className="section-label">SEARCH TRACKS</p>
-          <div className="search-box">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="曲名やアーティスト名で検索"
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            />
-            <button onClick={handleSearch} className="search-btn">
-              検索
-            </button>
+        <>
+          <div className="glass-card">
+            <div className="genre-filter">
+              <button
+                className={`genre-btn ${mode === "search" ? "active" : ""}`}
+                onClick={() => setMode("search")}
+              >
+                検索
+              </button>
+              <button
+                className={`genre-btn ${mode === "library" ? "active" : ""}`}
+                onClick={() => setMode("library")}
+              >
+                マイライブラリ
+              </button>
+            </div>
           </div>
-        </div>
+
+          {mode === "search" && (
+            <div className="glass-card">
+              <p className="section-label">SEARCH TRACKS</p>
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="曲名やアーティスト名で検索"
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                />
+                <button onClick={handleSearch} className="search-btn">
+                  検索
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === "library" && (
+            <div className="glass-card">
+              <p className="section-label">MY LIBRARY</p>
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={libraryQuery}
+                  onChange={(e) => setLibraryQuery(e.target.value)}
+                  placeholder="ライブラリ内を検索"
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {isSearching && <p className="section-label">検索中...</p>}
 
-      {searchResults.length > 0 && (
+      {((mode === "search" && searchResults.length > 0) ||
+        (mode === "library" && libraryTracks.length > 0)) && (
         <>
           <div className="bpm-display">
             <span className="bpm-value">{targetBpm}</span>
@@ -123,42 +290,55 @@ function App() {
             onMaxChange={setMaxBpm}
           />
 
-          <p className="section-label">{filteredResults.length} TRACKS</p>
+          <p className="section-label">
+            {mode === "search"
+              ? filteredResults.length
+              : filteredLibraryTracks.length}{" "}
+            TRACKS
+          </p>
           <ul className="song-list">
-            {filteredResults.map((song) => (
-              <li key={song.id} className="song-item">
-                {song.image && (
-                  <img
-                    src={song.image}
-                    alt=""
-                    style={{ width: 44, height: 44, borderRadius: 8 }}
-                  />
-                )}
-                <div className="song-info">
-                  <div className="song-title">{song.title}</div>
-                  <div className="song-artist">{song.artist}</div>
-                </div>
-                <div className="song-actions">
-                  <div className="rating-buttons">
-                    <button
-                      className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
-                      onClick={() => handleRating(song.id, "good")}
-                    >
-                      👍
-                    </button>
-                    <button
-                      className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
-                      onClick={() => handleRating(song.id, "bad")}
-                    >
-                      👎
-                    </button>
+            {(mode === "search" ? filteredResults : filteredLibraryTracks).map(
+              (song) => (
+                <li key={song.id} className="song-item">
+                  {song.image && (
+                    <img
+                      src={song.image}
+                      alt=""
+                      style={{ width: 44, height: 44, borderRadius: 8 }}
+                    />
+                  )}
+                  <div className="song-info">
+                    <div className="song-title">{song.title}</div>
+                    <div className="song-artist">{song.artist}</div>
                   </div>
-                  <span className="song-bpm-badge match-perfect">
-                    {song.bpm ? song.bpm : "..."}
-                  </span>
-                </div>
-              </li>
-            ))}
+                  <div className="song-actions">
+                    <div className="rating-buttons">
+                      <button
+                        className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
+                        onClick={() => handleRating(song.id, "good")}
+                      >
+                        👍
+                      </button>
+                      <button
+                        className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
+                        onClick={() => handleRating(song.id, "bad")}
+                      >
+                        👎
+                      </button>
+                    </div>
+                    <span
+                      className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
+                    >
+                      {song.bpm === null
+                        ? "..."
+                        : song.bpm === 0
+                          ? "-"
+                          : song.bpm}
+                    </span>
+                  </div>
+                </li>
+              ),
+            )}
           </ul>
         </>
       )}
