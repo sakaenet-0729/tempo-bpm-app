@@ -48,6 +48,8 @@ function App() {
     async function fetchLibrary() {
       if (token) {
         setIsLibraryLoading(true);
+
+        // いいねした曲を取得
         const likedData = await getMyTracks(token);
         const likedTracks = likedData.items
           .filter((item) => item.track)
@@ -60,10 +62,17 @@ function App() {
             rating: null,
           }));
 
-        const playlists = await getMyPlaylists(token);
-        let playlistTracks = [];
+        // まずいいねした曲だけ表示
+        setLibraryTracks(likedTracks);
 
+        // プレイリスト一覧を取得
+        const playlists = await getMyPlaylists(token);
+
+        // プレイリストを1つずつ取得して追加
         for (const pl of playlists) {
+          // 1秒待ってからリクエスト（API制限対策）
+          await new Promise((r) => setTimeout(r, 1000));
+
           const items = await getPlaylistTracks(pl.id, token);
           const tracks = items
             .filter((item) => item.track || item.item)
@@ -78,24 +87,33 @@ function App() {
                 rating: null,
               };
             });
-          playlistTracks = [...playlistTracks, ...tracks];
+
+          // 重複を除いて追加
+          setLibraryTracks((prev) => {
+            const existingIds = new Set(prev.map((t) => t.id));
+            const newTracks = tracks.filter((t) => !existingIds.has(t.id));
+            return [...prev, ...newTracks];
+          });
         }
 
-        const allTracks = [...likedTracks, ...playlistTracks];
-        const unique = allTracks.filter(
-          (track, index, self) =>
-            self.findIndex((t) => t.id === track.id) === index,
-        );
-
-        setLibraryTracks(unique);
         setIsLibraryLoading(false);
 
-        for (const track of unique) {
-          const bpm = await getTrackBpm(track.title, track.artist);
-          setLibraryTracks((prev) =>
-            prev.map((s) => (s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s)),
-          );
-        }
+        // BPMを順番に取得
+        setLibraryTracks((current) => {
+          const tracksToFetch = [...current];
+          (async () => {
+            for (const track of tracksToFetch) {
+              await new Promise((r) => setTimeout(r, 500));
+              const bpm = await getTrackBpm(track.title, track.artist);
+              setLibraryTracks((prev) =>
+                prev.map((s) =>
+                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+                ),
+              );
+            }
+          })();
+          return current;
+        });
       }
     }
     fetchLibrary();
