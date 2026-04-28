@@ -9,6 +9,7 @@ import {
   getMyTracks,
   getMyPlaylists,
   getPlaylistTracks,
+  searchByBpm,
 } from "./spotify";
 
 function App() {
@@ -22,6 +23,8 @@ function App() {
   const [libraryQuery, setLibraryQuery] = useState("");
   const [mode, setMode] = useState("search");
   const [displayCount, setDisplayCount] = useState(50);
+  const [selectedSong, setSelectedSong] = useState(null);
+  const [similarTracks, setSimilarTracks] = useState([]);
 
   useEffect(() => {
     async function fetchToken() {
@@ -205,180 +208,265 @@ function App() {
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
+  const handleSongSelect = async (song) => {
+    if (!song.bpm || song.bpm === 0) return;
+    setSelectedSong(song);
+    const results = await searchByBpm(song.bpm);
+    setSimilarTracks(results);
+    window.scrollTo(0, 0);
+  };
+
   return (
     <div className="app">
-      <div className="app-header">
-        <h1>TEMPO</h1>
-        {!token ? (
-          <button className="genre-btn active" onClick={loginWithSpotify}>
-            Spotifyログイン
-          </button>
-        ) : (
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#00d672",
-              fontSize: "13px",
-              cursor: "pointer",
-            }}
-          >
-            ● 接続済み（ログアウト）
-          </button>
-        )}{" "}
-      </div>
-
-      {token && (
+      {selectedSong && similarTracks.length > 0 ? (
         <>
-          <div className="glass-card">
-            <div className="genre-filter">
-              <button
-                className={`genre-btn ${mode === "search" ? "active" : ""}`}
-                onClick={() => setMode("search")}
-              >
-                検索
-              </button>
-              <button
-                className={`genre-btn ${mode === "library" ? "active" : ""}`}
-                onClick={() => setMode("library")}
-              >
-                マイライブラリ
-              </button>
-            </div>
+          <div className="app-header">
+            <button
+              onClick={() => {
+                setSelectedSong(null);
+                setSimilarTracks([]);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#00d672",
+                fontSize: "20px",
+                cursor: "pointer",
+              }}
+            >
+              ← 戻る
+            </button>
           </div>
 
-          {mode === "search" && (
-            <div className="glass-card">
-              <p className="section-label">SEARCH TRACKS</p>
-              <div className="search-box">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="曲名やアーティスト名で検索"
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                />
-                <button onClick={handleSearch} className="search-btn">
-                  検索
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === "library" && (
-            <div className="glass-card">
-              <p className="section-label">MY LIBRARY</p>
-              <div className="search-box">
-                <input
-                  type="text"
-                  value={libraryQuery}
-                  onChange={(e) => setLibraryQuery(e.target.value)}
-                  placeholder="ライブラリ内を検索"
-                />
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {isSearching && <p className="section-label">検索中...</p>}
-
-      {((mode === "search" && searchResults.length > 0) ||
-        (mode === "library" && libraryTracks.length > 0)) && (
-        <>
           <div className="bpm-display">
-            <span className="bpm-value">{targetBpm}</span>
+            <span className="bpm-value">{selectedSong.bpm}</span>
             <span className="bpm-label">BPM</span>
           </div>
 
-          <BpmFilter
-            minBpm={minBpm}
-            maxBpm={maxBpm}
-            onMinChange={setMinBpm}
-            onMaxChange={setMaxBpm}
-          />
+          <div className="glass-card">
+            <p className="section-label">
+              {selectedSong.title} - {selectedSong.artist} と同じBPMの楽曲
+            </p>
+          </div>
 
-          <p className="section-label">
-            {mode === "search"
-              ? filteredResults.length
-              : filteredLibraryTracks.length}{" "}
-            TRACKS
-          </p>
+          <p className="section-label">{similarTracks.length} TRACKS</p>
           <ul className="song-list">
-            {displayedTracks.map((song) => (
+            {similarTracks.map((song) => (
               <li key={song.id} className="song-item">
-                {song.image && (
-                  <img
-                    src={song.image}
-                    alt=""
-                    style={{ width: 44, height: 44, borderRadius: 8 }}
-                  />
-                )}
                 <div className="song-info">
                   <div className="song-title">{song.title}</div>
                   <div className="song-artist">{song.artist}</div>
                 </div>
-                <div className="song-actions">
-                  <div className="rating-buttons">
-                    <button
-                      className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
-                      onClick={() => handleRating(song.id, "good")}
-                    >
-                      👍
-                    </button>
-                    <button
-                      className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
-                      onClick={() => handleRating(song.id, "bad")}
-                    >
-                      👎
-                    </button>
-                  </div>
-                  <span
-                    className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
-                  >
-                    {song.bpm === null
-                      ? "..."
-                      : song.bpm === 0
-                        ? "-"
-                        : song.bpm}
-                  </span>
-                </div>
+                <span className="song-bpm-badge match-perfect">{song.bpm}</span>
               </li>
             ))}
           </ul>
-          {mode === "library" &&
-            displayCount < filteredLibraryTracks.length && (
-              <button
-                onClick={() => setDisplayCount((prev) => prev + 50)}
-                className="genre-btn active"
-                style={{ display: "block", margin: "16px auto" }}
-              >
-                もっと見る（残り{filteredLibraryTracks.length - displayCount}
-                曲）
+
+          <div className="bottom-nav">
+            <button className="nav-item">
+              <span className="nav-icon">◎</span>
+              BPM
+            </button>
+            <button className="nav-item active">
+              <span className="nav-icon">≡</span>
+              Tracks
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">▶</span>
+              Playing
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">⚙</span>
+              Settings
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="app-header">
+            <h1>TEMPO</h1>
+            {!token ? (
+              <button className="genre-btn active" onClick={loginWithSpotify}>
+                Spotifyログイン
               </button>
-            )}
+            ) : (
+              <button
+                onClick={handleLogout}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#00d672",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                ● 接続済み（ログアウト）
+              </button>
+            )}{" "}
+          </div>
+
+          {token && (
+            <>
+              <div className="glass-card">
+                <div className="genre-filter">
+                  <button
+                    className={`genre-btn ${mode === "search" ? "active" : ""}`}
+                    onClick={() => setMode("search")}
+                  >
+                    検索
+                  </button>
+                  <button
+                    className={`genre-btn ${mode === "library" ? "active" : ""}`}
+                    onClick={() => setMode("library")}
+                  >
+                    マイライブラリ
+                  </button>
+                </div>
+              </div>
+
+              {mode === "search" && (
+                <div className="glass-card">
+                  <p className="section-label">SEARCH TRACKS</p>
+                  <div className="search-box">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="曲名やアーティスト名で検索"
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    />
+                    <button onClick={handleSearch} className="search-btn">
+                      検索
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {mode === "library" && (
+                <div className="glass-card">
+                  <p className="section-label">MY LIBRARY</p>
+                  <div className="search-box">
+                    <input
+                      type="text"
+                      value={libraryQuery}
+                      onChange={(e) => setLibraryQuery(e.target.value)}
+                      placeholder="ライブラリ内を検索"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {isSearching && <p className="section-label">検索中...</p>}
+
+          {((mode === "search" && searchResults.length > 0) ||
+            (mode === "library" && libraryTracks.length > 0)) && (
+            <>
+              <div className="bpm-display">
+                <span className="bpm-value">{targetBpm}</span>
+                <span className="bpm-label">BPM</span>
+              </div>
+
+              <BpmFilter
+                minBpm={minBpm}
+                maxBpm={maxBpm}
+                onMinChange={setMinBpm}
+                onMaxChange={setMaxBpm}
+              />
+
+              <p className="section-label">
+                {mode === "search"
+                  ? filteredResults.length
+                  : filteredLibraryTracks.length}{" "}
+                TRACKS
+              </p>
+              <ul className="song-list">
+                {displayedTracks.map((song) => (
+                  <li
+                    key={song.id}
+                    className="song-item"
+                    style={{
+                      cursor:
+                        song.bpm && song.bpm !== 0 ? "pointer" : "default",
+                    }}
+                    onClick={() => handleSongSelect(song)}
+                  >
+                    {song.image && (
+                      <img
+                        src={song.image}
+                        alt=""
+                        style={{ width: 44, height: 44, borderRadius: 8 }}
+                      />
+                    )}
+                    <div className="song-info">
+                      <div className="song-title">{song.title}</div>
+                      <div className="song-artist">{song.artist}</div>
+                    </div>
+                    <div className="song-actions">
+                      <div className="rating-buttons">
+                        <button
+                          className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
+                          onClick={() => handleRating(song.id, "good")}
+                        >
+                          👍
+                        </button>
+                        <button
+                          className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
+                          onClick={() => handleRating(song.id, "bad")}
+                        >
+                          👎
+                        </button>
+                      </div>
+                      <span
+                        className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
+                      >
+                        {song.bpm === null
+                          ? "..."
+                          : song.bpm === 0
+                            ? "-"
+                            : song.bpm}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {mode === "library" &&
+                displayCount < filteredLibraryTracks.length && (
+                  <button
+                    onClick={() => setDisplayCount((prev) => prev + 50)}
+                    className="genre-btn active"
+                    style={{ display: "block", margin: "16px auto" }}
+                  >
+                    もっと見る（残り
+                    {filteredLibraryTracks.length - displayCount}
+                    曲）
+                  </button>
+                )}
+            </>
+          )}
+
+          <div className="bottom-nav">
+            <button className="nav-item">
+              <span className="nav-icon">◎</span>
+              BPM
+            </button>
+            <button className="nav-item active">
+              <span className="nav-icon">≡</span>
+              Tracks
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">▶</span>
+              Playing
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">⚙</span>
+              Settings
+            </button>
+          </div>
         </>
       )}
-
-      <div className="bottom-nav">
-        <button className="nav-item">
-          <span className="nav-icon">◎</span>
-          BPM
-        </button>
-        <button className="nav-item active">
-          <span className="nav-icon">≡</span>
-          Tracks
-        </button>
-        <button className="nav-item">
-          <span className="nav-icon">▶</span>
-          Playing
-        </button>
-        <button className="nav-item">
-          <span className="nav-icon">⚙</span>
-          Settings
-        </button>
-      </div>
     </div>
   );
 }

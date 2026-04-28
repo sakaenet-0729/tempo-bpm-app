@@ -180,3 +180,24 @@ export async function getMyTracks(token, offset = 0) {
   const data = await response.json();
   return data;
 }
+
+export async function searchByBpm(bpm) {
+  const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
+
+  const response = await fetch(
+    `https://api.getsong.co/tempo/?api_key=${API_KEY}&bpm=${bpm}`,
+  );
+  const data = await response.json();
+
+  if (data.tempo && Array.isArray(data.tempo)) {
+    return data.tempo.map((song) => ({
+      id: song.song_id,
+      title: song.song_title,
+      artist: song.artist?.name || "Unknown",
+      bpm: Number(song.tempo),
+      image: null,
+      rating: null,
+    }));
+  }
+  return [];
+}
