@@ -21,6 +21,7 @@ function App() {
   const [libraryTracks, setLibraryTracks] = useState([]);
   const [libraryQuery, setLibraryQuery] = useState("");
   const [mode, setMode] = useState("search");
+  const [displayCount, setDisplayCount] = useState(50);
 
   useEffect(() => {
     async function fetchToken() {
@@ -84,10 +85,13 @@ function App() {
         );
 
         setLibraryTracks(unique);
+        console.log("ライブラリ曲数:", unique.length);
 
         // BPMを取得
         for (const track of unique) {
+          console.log("BPM取得中:", track.title, track.artist);
           const bpm = await getTrackBpm(track.title, track.artist);
+          console.log("BPM結果:", track.title, bpm);
           setLibraryTracks((prev) =>
             prev.map((s) => (s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s)),
           );
@@ -194,6 +198,11 @@ function App() {
       return a.bpm - b.bpm;
     });
 
+  const displayedTracks =
+    mode === "search"
+      ? filteredResults
+      : filteredLibraryTracks.slice(0, displayCount);
+
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
   return (
@@ -297,49 +306,58 @@ function App() {
             TRACKS
           </p>
           <ul className="song-list">
-            {(mode === "search" ? filteredResults : filteredLibraryTracks).map(
-              (song) => (
-                <li key={song.id} className="song-item">
-                  {song.image && (
-                    <img
-                      src={song.image}
-                      alt=""
-                      style={{ width: 44, height: 44, borderRadius: 8 }}
-                    />
-                  )}
-                  <div className="song-info">
-                    <div className="song-title">{song.title}</div>
-                    <div className="song-artist">{song.artist}</div>
-                  </div>
-                  <div className="song-actions">
-                    <div className="rating-buttons">
-                      <button
-                        className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
-                        onClick={() => handleRating(song.id, "good")}
-                      >
-                        👍
-                      </button>
-                      <button
-                        className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
-                        onClick={() => handleRating(song.id, "bad")}
-                      >
-                        👎
-                      </button>
-                    </div>
-                    <span
-                      className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
+            {displayedTracks.map((song) => (
+              <li key={song.id} className="song-item">
+                {song.image && (
+                  <img
+                    src={song.image}
+                    alt=""
+                    style={{ width: 44, height: 44, borderRadius: 8 }}
+                  />
+                )}
+                <div className="song-info">
+                  <div className="song-title">{song.title}</div>
+                  <div className="song-artist">{song.artist}</div>
+                </div>
+                <div className="song-actions">
+                  <div className="rating-buttons">
+                    <button
+                      className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
+                      onClick={() => handleRating(song.id, "good")}
                     >
-                      {song.bpm === null
-                        ? "..."
-                        : song.bpm === 0
-                          ? "-"
-                          : song.bpm}
-                    </span>
+                      👍
+                    </button>
+                    <button
+                      className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
+                      onClick={() => handleRating(song.id, "bad")}
+                    >
+                      👎
+                    </button>
                   </div>
-                </li>
-              ),
-            )}
+                  <span
+                    className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
+                  >
+                    {song.bpm === null
+                      ? "..."
+                      : song.bpm === 0
+                        ? "-"
+                        : song.bpm}
+                  </span>
+                </div>
+              </li>
+            ))}
           </ul>
+          {mode === "library" &&
+            displayCount < filteredLibraryTracks.length && (
+              <button
+                onClick={() => setDisplayCount((prev) => prev + 50)}
+                className="genre-btn active"
+                style={{ display: "block", margin: "16px auto" }}
+              >
+                もっと見る（残り{filteredLibraryTracks.length - displayCount}
+                曲）
+              </button>
+            )}
         </>
       )}
 
