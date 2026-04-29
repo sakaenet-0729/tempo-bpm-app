@@ -28,6 +28,7 @@ function App() {
   const [similarGenre, setSimilarGenre] = useState("All");
   const [isSimilarLoading, setIsSimilarLoading] = useState(false);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     async function fetchToken() {
@@ -379,20 +380,14 @@ function App() {
           {mode === "library" && (
             <div className="glass-card">
               <p className="section-label">MY LIBRARY</p>
-              {isLibraryLoading ? (
-                <p style={{ textAlign: "center", color: "#888" }}>
-                  ライブラリを読み込み中...
-                </p>
-              ) : (
-                <div className="search-box">
-                  <input
-                    type="text"
-                    value={libraryQuery}
-                    onChange={(e) => setLibraryQuery(e.target.value)}
-                    placeholder="ライブラリ内を検索"
-                  />
-                </div>
-              )}
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={libraryQuery}
+                  onChange={(e) => setLibraryQuery(e.target.value)}
+                  placeholder="ライブラリ内を検索"
+                />
+              </div>
             </div>
           )}{" "}
         </>
@@ -477,10 +472,19 @@ function App() {
             ))}
           </ul>
 
+          {isSearching && <p className="section-label">検索中...</p>}
+
           {mode === "library" &&
-            displayCount < filteredLibraryTracks.length && (
+            displayCount < filteredLibraryTracks.length &&
+            !isLoadingMore && (
               <button
-                onClick={() => setDisplayCount((prev) => prev + 50)}
+                onClick={() => {
+                  setIsLoadingMore(true);
+                  setTimeout(() => {
+                    setDisplayCount((prev) => prev + 50);
+                    setIsLoadingMore(false);
+                  }, 800);
+                }}
                 className="genre-btn active"
                 style={{ display: "block", margin: "16px auto" }}
               >
@@ -488,6 +492,12 @@ function App() {
                 {filteredLibraryTracks.length - displayCount}曲）
               </button>
             )}
+
+          {isLoadingMore && (
+            <div style={{ textAlign: "center", margin: "16px 0" }}>
+              <div className="loading-spinner" />
+            </div>
+          )}
         </>
       )}
 

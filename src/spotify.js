@@ -222,6 +222,6 @@ export async function searchByBpm(bpm) {
       image: null,
       rating: null,
     }))
-    .filter((song) => song.bpm >= bpm - 20 && song.bpm <= bpm + 20)
+    .filter((song) => song.bpm >= bpm - 10 && song.bpm <= bpm + 10)
     .sort((a, b) => Math.abs(a.bpm - bpm) - Math.abs(b.bpm - bpm));
 }
