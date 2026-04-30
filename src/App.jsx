@@ -80,7 +80,7 @@ function App() {
         // プレイリストを1つずつ取得して追加
         for (const pl of playlists) {
           // 1秒待ってからリクエスト（API制限対策）
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 2000));
 
           const items = await getPlaylistTracks(pl.id, token);
           const tracks = items
@@ -112,7 +112,7 @@ function App() {
           const tracksToFetch = [...current];
           (async () => {
             for (const track of tracksToFetch) {
-              await new Promise((r) => setTimeout(r, 500));
+              await new Promise((r) => setTimeout(r, 1000));
               const bpm = await getTrackBpm(track.title, track.artist);
               setLibraryTracks((prev) =>
                 prev.map((s) =>
