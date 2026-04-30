@@ -208,6 +208,19 @@ body {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.8);
   transition: transform 0.15s ease;
+  overflow: hidden;
+}
+
+.song-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.song-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .song-item:hover {
