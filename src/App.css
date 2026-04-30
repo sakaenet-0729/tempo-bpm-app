@@ -220,22 +220,24 @@ body {
 .song-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
+  margin-left: auto;
 }
+
 
 .song-item:hover {
   transform: translateY(-1px);
 }
 
 .song-bpm-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
@@ -297,9 +299,9 @@ body {
   background: transparent;
   border: none;
   border-radius: 8px;
-  padding: 6px;
+  padding: 4px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   opacity: 0.3;
   transition: all 0.2s ease;
 }
