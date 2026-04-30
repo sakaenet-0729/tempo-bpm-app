@@ -453,6 +453,18 @@ body {
   margin: 0 auto;
 }
 
+input[type="text"],
+input[type="search"] {
+  font-size: 16px;
+  /* 16px以上に設定 */
+  /* 見た目を小さくしたい場合は、後述のtransformで縮小する */
+}
+
+/* 
+*
+* レスポンシブ対応
+*
+*/
 @media screen and (max-width:480px) {
   .song-item {
     display: flex;
