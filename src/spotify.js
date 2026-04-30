@@ -11,7 +11,7 @@ const REDIRECT_URI =
 // 「このアプリがアクセスしたい範囲」を指定
 // 今はユーザーの基本情報だけ。曲検索は指定なしでもできる
 const SCOPES =
-  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative";
+  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private";
 
 function generateRandomString(length) {
   // ランダムな文字列を作る
@@ -145,35 +145,43 @@ export async function getPlaylistTracks(playlistId, token) {
 export async function getTrackBpm(trackName, artistName) {
   const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
 
-  // まず曲名+アーティスト名（日本語かも）で検索
-  let response = await fetch(
-    `https://api.getsong.co/search/?api_key=${API_KEY}&type=both&lookup=song:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}`,
-  );
-  let data = await response.json();
+  try {
+    let response = await fetch(
+      `https://api.getsong.co/search/?api_key=${API_KEY}&type=both&lookup=song:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}`,
+    );
 
-  if (data.search && Array.isArray(data.search) && data.search.length > 0) {
-    const tempos = data.search
-      .map((s) => Number(s.tempo))
-      .filter((t) => t > 0 && t < 300);
-    if (tempos.length > 0) {
-      return tempos[0];
+    if (response.ok) {
+      let data = await response.json();
+      if (data.search && Array.isArray(data.search) && data.search.length > 0) {
+        const tempos = data.search
+          .map((s) => Number(s.tempo))
+          .filter((t) => t > 0 && t < 300);
+        if (tempos.length > 0) {
+          return tempos[0];
+        }
+      }
     }
+
+    // フォールバック：曲名だけで再検索
+    response = await fetch(
+      `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=${encodeURIComponent(trackName)}`,
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.search && Array.isArray(data.search) && data.search.length > 0) {
+        const tempos = data.search
+          .map((s) => Number(s.tempo))
+          .filter((t) => t > 0 && t < 300);
+        if (tempos.length > 0) {
+          return tempos[0];
+        }
+      }
+    }
+  } catch {
+    // API制限やネットワークエラー
   }
 
-  // ヒットしなかったら曲名だけで再検索
-  response = await fetch(
-    `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=${encodeURIComponent(trackName)}`,
-  );
-  data = await response.json();
-
-  if (data.search && Array.isArray(data.search) && data.search.length > 0) {
-    const tempos = data.search
-      .map((s) => Number(s.tempo))
-      .filter((t) => t > 0 && t < 300);
-    if (tempos.length > 0) {
-      return tempos[0];
-    }
-  }
   return null;
 }
 
@@ -224,4 +232,36 @@ export async function searchByBpm(bpm) {
     }))
     .filter((song) => song.bpm >= bpm - 10 && song.bpm <= bpm + 10)
     .sort((a, b) => Math.abs(a.bpm - bpm) - Math.abs(b.bpm - bpm));
+}
+
+export async function createPlaylist(token, name) {
+  const response = await fetch("https://api.spotify.com/v1/me/playlists", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: name,
+      description: "Created by TEMPO",
+      public: false,
+    }),
+  });
+  const data = await response.json();
+  return data;
+}
+
+export async function addTracksToPlaylist(token, playlistId, trackUris) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}/items`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ uris: trackUris }),
+    },
+  );
+  return response.json();
 }

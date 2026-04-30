@@ -10,6 +10,8 @@ import {
   getMyPlaylists,
   getPlaylistTracks,
   searchByBpm,
+  createPlaylist,
+  addTracksToPlaylist,
 } from "./spotify";
 
 function App() {
@@ -29,6 +31,10 @@ function App() {
   const [isSimilarLoading, setIsSimilarLoading] = useState(false);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [selectedTracks, setSelectedTracks] = useState([]);
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
+  const [playlistCreated, setPlaylistCreated] = useState(false);
+  const [playlistName, setPlaylistName] = useState("");
 
   useEffect(() => {
     async function fetchToken() {
@@ -159,6 +165,7 @@ function App() {
     setSelectedSong(song);
     setIsSimilarLoading(true);
     setSimilarGenre("All");
+    setPlaylistName(`TEMPO - BPM ${song.bpm} Mix`);
     const results = await searchByBpm(song.bpm);
     setSimilarTracks(results);
     setIsSimilarLoading(false);
@@ -169,6 +176,48 @@ function App() {
     setSelectedSong(null);
     setSimilarTracks([]);
     setSimilarGenre("All");
+    setSelectedTracks([]);
+    setPlaylistCreated(false);
+  };
+
+  const toggleTrackSelect = (song) => {
+    setSelectedTracks((prev) => {
+      if (prev.find((t) => t.id === song.id)) {
+        return prev.filter((t) => t.id !== song.id);
+      }
+      return [...prev, song];
+    });
+  };
+
+  const handleCreatePlaylist = async () => {
+    if (selectedTracks.length === 0 || !token) return;
+    setIsCreatingPlaylist(true);
+
+    const playlist = await createPlaylist(
+      token,
+      playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
+    );
+
+    if (playlist.id) {
+      const trackUris = [];
+      for (const track of selectedTracks) {
+        const results = await searchTracks(
+          `${track.title} ${track.artist}`,
+          token,
+        );
+        if (results.length > 0) {
+          trackUris.push(`spotify:track:${results[0].id}`);
+        }
+      }
+
+      if (trackUris.length > 0) {
+        await addTracksToPlaylist(token, playlist.id, trackUris);
+      }
+    }
+
+    setIsCreatingPlaylist(false);
+    setPlaylistCreated(true);
+    setTimeout(() => setPlaylistCreated(false), 3000);
   };
 
   const filteredResults = searchResults
@@ -253,6 +302,17 @@ function App() {
                 <span className="bpm-value">{selectedSong.bpm}</span>
                 <span className="bpm-label">BPM</span>
               </div>
+              <p className="section-label" style={{ marginTop: "12px" }}>
+                PLAYLIST NAME
+              </p>
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={playlistName}
+                  onChange={(e) => setPlaylistName(e.target.value)}
+                  placeholder="プレイリスト名"
+                />
+              </div>
             </div>
 
             <div className="glass-card">
@@ -277,7 +337,17 @@ function App() {
             </p>
             <ul className="song-list">
               {filteredSimilarTracks.map((song) => (
-                <li key={song.id} className="song-item">
+                <li
+                  key={song.id}
+                  className="song-item"
+                  style={{
+                    cursor: "pointer",
+                    border: selectedTracks.find((t) => t.id === song.id)
+                      ? "2px solid #00d672"
+                      : "1px solid rgba(255, 255, 255, 0.8)",
+                  }}
+                  onClick={() => toggleTrackSelect(song)}
+                >
                   <div className="song-bpm-badge match-perfect">{song.bpm}</div>
                   <div className="song-info">
                     <div className="song-title">{song.title}</div>
@@ -293,6 +363,63 @@ function App() {
               ))}
             </ul>
           </>
+        )}
+
+        {selectedTracks.length > 0 && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "72px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "100%",
+              maxWidth: "420px",
+              padding: "0 16px",
+              zIndex: 10,
+            }}
+          >
+            <button
+              onClick={handleCreatePlaylist}
+              className="genre-btn active"
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "14px",
+                fontSize: "16px",
+                borderRadius: "12px",
+                boxShadow: "0 4px 12px rgba(0, 214, 114, 0.3)",
+              }}
+              disabled={isCreatingPlaylist}
+            >
+              {isCreatingPlaylist
+                ? "作成中..."
+                : `${selectedTracks.length}曲でプレイリスト作成`}
+            </button>
+          </div>
+        )}
+
+        {playlistCreated && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "120px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 10,
+            }}
+          >
+            <p
+              style={{
+                color: "#00d672",
+                fontSize: "14px",
+                background: "rgba(255,255,255,0.9)",
+                padding: "8px 16px",
+                borderRadius: "8px",
+              }}
+            >
+              ✓ Spotifyにプレイリストを作成しました！
+            </p>
+          </div>
         )}
 
         <div className="bottom-nav">
@@ -401,15 +528,13 @@ function App() {
           <div className="bpm-display">
             <span className="bpm-value">{targetBpm}</span>
             <span className="bpm-label">BPM</span>
-          </div>
-
+          </div>{" "}
           <BpmFilter
             minBpm={minBpm}
             maxBpm={maxBpm}
             onMinChange={setMinBpm}
             onMaxChange={setMaxBpm}
           />
-
           <p className="section-label">
             {mode === "search"
               ? filteredResults.length
@@ -461,19 +586,19 @@ function App() {
                   <span
                     className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
                   >
-                    {song.bpm === null
-                      ? "..."
-                      : song.bpm === 0
-                        ? "-"
-                        : song.bpm}
+                    {song.bpm === null ? (
+                      <div className="loading-spinner-small" />
+                    ) : song.bpm === 0 ? (
+                      "-"
+                    ) : (
+                      song.bpm
+                    )}
                   </span>
                 </div>
               </li>
             ))}
           </ul>
-
           {isSearching && <p className="section-label">検索中...</p>}
-
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length &&
             !isLoadingMore && (
@@ -492,7 +617,6 @@ function App() {
                 {filteredLibraryTracks.length - displayCount}曲）
               </button>
             )}
-
           {isLoadingMore && (
             <div style={{ textAlign: "center", margin: "16px 0" }}>
               <div className="loading-spinner" />
