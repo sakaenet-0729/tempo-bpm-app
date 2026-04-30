@@ -36,6 +36,7 @@ function App() {
   const [playlistCreated, setPlaylistCreated] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
   const [libraryMatches, setLibraryMatches] = useState([]);
+  const [similarMode, setSimilarMode] = useState("library");
 
   useEffect(() => {
     async function fetchToken() {
@@ -193,6 +194,7 @@ function App() {
     setSimilarGenre("All");
     setSelectedTracks([]);
     setPlaylistCreated(false);
+    setSimilarMode("library");
   };
 
   const toggleTrackSelect = (song) => {
@@ -318,70 +320,53 @@ function App() {
                 <span className="bpm-label">BPM</span>
               </div>
             </div>
-            {libraryMatches.length > 0 && (
-              <div className="glass-card">
-                <p className="section-label">
-                  MY LIBRARY - BPM {selectedSong.bpm}±10
-                </p>
-                <ul className="song-list">
-                  {libraryMatches.map((song) => (
-                    <li
-                      key={song.id}
-                      className="song-item"
-                      style={{
-                        cursor: "pointer",
-                        border: selectedTracks.find((t) => t.id === song.id)
-                          ? "2px solid #00d672"
-                          : "1px solid rgba(255, 255, 255, 0.8)",
-                      }}
-                      onClick={() => toggleTrackSelect(song)}
-                    >
-                      {song.image && (
-                        <img
-                          src={song.image}
-                          alt=""
-                          style={{ width: 44, height: 44, borderRadius: 8 }}
-                        />
-                      )}
-                      <div className="song-info">
-                        <div className="song-title">{song.title}</div>
-                        <div className="song-artist">{song.artist}</div>
-                      </div>
-                      <div className="song-bpm-badge match-perfect">
-                        {song.bpm}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <p className="section-label" style={{ marginTop: "16px" }}>
-              DISCOVER - BPM {selectedSong.bpm}±10
-            </p>
 
             <div className="glass-card">
-              <p className="section-label">GENRE</p>
               <div className="genre-filter">
-                {["All", ...new Set(similarTracks.map((s) => s.genre))].map(
-                  (genre) => (
-                    <button
-                      key={genre}
-                      className={`genre-btn ${similarGenre === genre ? "active" : ""}`}
-                      onClick={() => setSimilarGenre(genre)}
-                    >
-                      {genre}
-                    </button>
-                  ),
-                )}
+                <button
+                  className={`genre-btn ${similarMode === "library" ? "active" : ""}`}
+                  onClick={() => setSimilarMode("library")}
+                >
+                  マイライブラリ
+                </button>
+                <button
+                  className={`genre-btn ${similarMode === "discover" ? "active" : ""}`}
+                  onClick={() => setSimilarMode("discover")}
+                >
+                  オススメ
+                </button>
               </div>
             </div>
 
+            {similarMode === "discover" && (
+              <div className="glass-card">
+                <p className="section-label">GENRE</p>
+                <div className="genre-filter">
+                  {["All", ...new Set(similarTracks.map((s) => s.genre))].map(
+                    (genre) => (
+                      <button
+                        key={genre}
+                        className={`genre-btn ${similarGenre === genre ? "active" : ""}`}
+                        onClick={() => setSimilarGenre(genre)}
+                      >
+                        {genre}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+
             <p className="section-label">
-              {filteredSimilarTracks.length} TRACKS
+              {similarMode === "library"
+                ? `${libraryMatches.length} TRACKS`
+                : `${filteredSimilarTracks.length} TRACKS`}
             </p>
             <ul className="song-list">
-              {filteredSimilarTracks.map((song) => (
+              {(similarMode === "library"
+                ? libraryMatches
+                : filteredSimilarTracks
+              ).map((song) => (
                 <li
                   key={song.id}
                   className="song-item"
@@ -393,17 +378,26 @@ function App() {
                   }}
                   onClick={() => toggleTrackSelect(song)}
                 >
+                  {song.image && (
+                    <img
+                      src={song.image}
+                      alt=""
+                      style={{ width: 44, height: 44, borderRadius: 8 }}
+                    />
+                  )}
                   <div className="song-bpm-badge match-perfect">{song.bpm}</div>
                   <div className="song-info">
                     <div className="song-title">{song.title}</div>
                     <div className="song-artist">{song.artist}</div>
                   </div>
-                  <span
-                    className="genre-btn"
-                    style={{ fontSize: "11px", padding: "4px 8px" }}
-                  >
-                    {song.genre}
-                  </span>
+                  {song.genre && (
+                    <span
+                      className="genre-btn"
+                      style={{ fontSize: "11px", padding: "4px 8px" }}
+                    >
+                      {song.genre}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -437,7 +431,7 @@ function App() {
                   type="text"
                   value={playlistName}
                   onChange={(e) => setPlaylistName(e.target.value)}
-                  placeholder="プレイリスト名"
+                  placeholder="プレイリスト名を変更する"
                   style={{ fontSize: "13px" }}
                 />
               </div>
