@@ -99,15 +99,19 @@ export async function getAccessToken() {
 }
 
 export async function searchTracks(query, token) {
-  // Spotifyに「この曲検索して」とリクエストを送る
   const response = await fetch(
     `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=10`,
     {
       headers: { Authorization: `Bearer ${token}` },
     },
   );
+  if (response.status === 401) {
+    localStorage.removeItem("spotify_token");
+    window.location.reload();
+    return [];
+  }
   const data = await response.json();
-  return data.tracks.items;
+  return data.tracks?.items || [];
 }
 
 export async function getMyPlaylists(token) {
@@ -118,6 +122,11 @@ export async function getMyPlaylists(token) {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
+    if (response.status === 401) {
+      localStorage.removeItem("spotify_token");
+      window.location.reload();
+      return [];
+    }
     if (!response.ok) return [];
     const data = await response.json();
     return data.items || [];
@@ -191,6 +200,11 @@ export async function getMyTracks(token, offset = 0) {
       `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
+    if (response.status === 401) {
+      localStorage.removeItem("spotify_token");
+      window.location.reload();
+      return { items: [] };
+    }
     if (!response.ok) return { items: [] };
     const data = await response.json();
     return data;
