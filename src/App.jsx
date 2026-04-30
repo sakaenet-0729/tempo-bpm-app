@@ -167,8 +167,9 @@ function App() {
     setSelectedSong(song);
     setIsSimilarLoading(true);
     setSimilarGenre("All");
-    setPlaylistName(`TEMPO - BPM ${song.bpm} Mix`);
+    setPlaylistName("");
     setSelectedTracks([]);
+    setSimilarMode("library");
 
     // ライブラリ内の同じBPM帯の曲をフィルタ
     const bpmRange = 10;
@@ -431,7 +432,7 @@ function App() {
                   type="text"
                   value={playlistName}
                   onChange={(e) => setPlaylistName(e.target.value)}
-                  placeholder="プレイリスト名を変更する"
+                  placeholder="プレイリストに名前を追加"
                   style={{ fontSize: "13px" }}
                 />
               </div>
