@@ -35,6 +35,7 @@ function App() {
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [playlistCreated, setPlaylistCreated] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
+  const [libraryMatches, setLibraryMatches] = useState([]);
 
   useEffect(() => {
     async function fetchToken() {
@@ -166,6 +167,20 @@ function App() {
     setIsSimilarLoading(true);
     setSimilarGenre("All");
     setPlaylistName(`TEMPO - BPM ${song.bpm} Mix`);
+    setSelectedTracks([]);
+
+    // ライブラリ内の同じBPM帯の曲をフィルタ
+    const bpmRange = 10;
+    const libraryMatches = libraryTracks.filter(
+      (t) =>
+        t.id !== song.id &&
+        t.bpm &&
+        t.bpm !== 0 &&
+        Math.abs(t.bpm - song.bpm) <= bpmRange,
+    );
+    setLibraryMatches(libraryMatches);
+
+    // GetSongBPMからも取得
     const results = await searchByBpm(song.bpm);
     setSimilarTracks(results);
     setIsSimilarLoading(false);
@@ -302,18 +317,48 @@ function App() {
                 <span className="bpm-value">{selectedSong.bpm}</span>
                 <span className="bpm-label">BPM</span>
               </div>
-              <p className="section-label" style={{ marginTop: "12px" }}>
-                PLAYLIST NAME
-              </p>
-              <div className="search-box">
-                <input
-                  type="text"
-                  value={playlistName}
-                  onChange={(e) => setPlaylistName(e.target.value)}
-                  placeholder="プレイリスト名"
-                />
-              </div>
             </div>
+            {libraryMatches.length > 0 && (
+              <div className="glass-card">
+                <p className="section-label">
+                  MY LIBRARY - BPM {selectedSong.bpm}±10
+                </p>
+                <ul className="song-list">
+                  {libraryMatches.map((song) => (
+                    <li
+                      key={song.id}
+                      className="song-item"
+                      style={{
+                        cursor: "pointer",
+                        border: selectedTracks.find((t) => t.id === song.id)
+                          ? "2px solid #00d672"
+                          : "1px solid rgba(255, 255, 255, 0.8)",
+                      }}
+                      onClick={() => toggleTrackSelect(song)}
+                    >
+                      {song.image && (
+                        <img
+                          src={song.image}
+                          alt=""
+                          style={{ width: 44, height: 44, borderRadius: 8 }}
+                        />
+                      )}
+                      <div className="song-info">
+                        <div className="song-title">{song.title}</div>
+                        <div className="song-artist">{song.artist}</div>
+                      </div>
+                      <div className="song-bpm-badge match-perfect">
+                        {song.bpm}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p className="section-label" style={{ marginTop: "16px" }}>
+              DISCOVER - BPM {selectedSong.bpm}±10
+            </p>
 
             <div className="glass-card">
               <p className="section-label">GENRE</p>
@@ -378,23 +423,41 @@ function App() {
               zIndex: 10,
             }}
           >
-            <button
-              onClick={handleCreatePlaylist}
-              className="genre-btn active"
+            <div
               style={{
-                display: "block",
-                width: "100%",
-                padding: "14px",
-                fontSize: "16px",
-                borderRadius: "12px",
-                boxShadow: "0 4px 12px rgba(0, 214, 114, 0.3)",
+                background: "rgba(255, 255, 255, 0.95)",
+                backdropFilter: "blur(20px)",
+                borderRadius: "16px",
+                padding: "12px",
+                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
               }}
-              disabled={isCreatingPlaylist}
             >
-              {isCreatingPlaylist
-                ? "作成中..."
-                : `${selectedTracks.length}曲でプレイリスト作成`}
-            </button>
+              <div className="search-box" style={{ marginBottom: "8px" }}>
+                <input
+                  type="text"
+                  value={playlistName}
+                  onChange={(e) => setPlaylistName(e.target.value)}
+                  placeholder="プレイリスト名"
+                  style={{ fontSize: "13px" }}
+                />
+              </div>
+              <button
+                onClick={handleCreatePlaylist}
+                className="genre-btn active"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "12px",
+                  fontSize: "15px",
+                  borderRadius: "10px",
+                }}
+                disabled={isCreatingPlaylist}
+              >
+                {isCreatingPlaylist
+                  ? "作成中..."
+                  : `${selectedTracks.length}曲でプレイリスト作成`}
+              </button>
+            </div>
           </div>
         )}
 
