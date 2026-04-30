@@ -200,8 +200,8 @@ body {
 .song-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 2vw;
+  padding: 2.5vw;
   border-radius: 12px;
   margin-bottom: 8px;
   background: rgba(255, 255, 255, 0.65);
@@ -210,6 +210,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.8);
   transition: transform 0.15s ease;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .song-info {
@@ -231,13 +232,13 @@ body {
 }
 
 .song-bpm-badge {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 10vw;
+  height: 10vw;
+  border-radius: 2.5vw;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 3vw;
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
@@ -261,12 +262,17 @@ body {
 }
 
 .song-title {
-  font-size: 15px;
+  font-size: 3.5vw;
   font-weight: 600;
   color: #1a1a2e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.song-artist {
+  font-size: 3vw;
+  color: #888;
 }
 
 .song-artist {
@@ -287,21 +293,22 @@ body {
 .song-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1vw;
+  flex-shrink: 0;
 }
 
 .rating-buttons {
   display: flex;
-  gap: 2px;
+  gap: 0;
 }
 
 .rating-btn {
   background: transparent;
   border: none;
   border-radius: 8px;
-  padding: 4px;
+  padding: 1vw;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 3.5vw;
   opacity: 0.3;
   transition: all 0.2s ease;
 }
