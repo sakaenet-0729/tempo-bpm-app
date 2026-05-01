@@ -469,8 +469,8 @@ input[type="search"] {
   .song-item {
     display: flex;
     align-items: center;
-    gap: 2vw;
-    padding: 2.5vw;
+    gap: 1.8vw;
+    padding: 2.3vw;
     border-radius: 12px;
     margin-bottom: 8px;
     background: rgba(255, 255, 255, 0.65);
