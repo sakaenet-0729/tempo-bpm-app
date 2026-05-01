@@ -491,7 +491,7 @@ input[type="search"] {
     font-size: 3.5vw;
     font-weight: 600;
     color: #1a1a2e;
-    white-space: nowrap;
+    /* white-space: nowrap; */
     overflow: hidden;
     text-overflow: ellipsis;
   }
