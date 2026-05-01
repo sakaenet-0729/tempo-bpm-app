@@ -38,6 +38,7 @@ function App() {
   const [libraryMatches, setLibraryMatches] = useState([]);
   const [similarMode, setSimilarMode] = useState("library");
   const [libraryError, setLibraryError] = useState("");
+  const [libraryError, setLibraryError] = useState("");
 
   useEffect(() => {
     async function fetchToken() {
@@ -62,6 +63,16 @@ function App() {
         if (cached) {
           const cachedData = JSON.parse(cached);
           setLibraryTracks(cachedData);
+
+          setLibraryTracks(unique);
+          localStorage.setItem("library_cache", JSON.stringify(unique));
+
+          if (unique.length === 0) {
+            setLibraryError(
+              "データ取得の制限中です。数分後にもう一度お試しください",
+            );
+          }
+
           setIsLibraryLoading(false);
 
           // BPMが未取得の曲だけBPM取得
@@ -617,6 +628,7 @@ function App() {
               <button
                 onClick={() => {
                   setLibraryError("");
+                  localStorage.removeItem("library_cache");
                   window.location.reload();
                 }}
                 className="genre-btn active"
@@ -625,7 +637,7 @@ function App() {
                 再読み込み
               </button>
             </div>
-          )}{" "}
+          )}
         </>
       )}
 
