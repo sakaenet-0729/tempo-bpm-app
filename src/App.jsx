@@ -37,6 +37,7 @@ function App() {
   const [playlistName, setPlaylistName] = useState("");
   const [libraryMatches, setLibraryMatches] = useState([]);
   const [similarMode, setSimilarMode] = useState("library");
+  const [libraryError, setLibraryError] = useState("");
 
   useEffect(() => {
     async function fetchToken() {
@@ -101,6 +102,11 @@ function App() {
         for (const pl of playlists) {
           await new Promise((r) => setTimeout(r, 2000));
           const items = await getPlaylistTracks(pl.id, token);
+          if (items.length === 0 && !cached) {
+            setLibraryError(
+              "データ取得の制限中です。数分後にもう一度お試しください",
+            );
+          }
           const tracks = items
             .filter((item) => item.track || item.item)
             .map((item) => {
@@ -605,17 +611,19 @@ function App() {
               </div>
             </div>
           )}
-          {mode === "library" && (
-            <div className="glass-card">
-              <p className="section-label">MY LIBRARY</p>
-              <div className="search-box">
-                <input
-                  type="text"
-                  value={libraryQuery}
-                  onChange={(e) => setLibraryQuery(e.target.value)}
-                  placeholder="ライブラリ内を検索"
-                />
-              </div>
+          {mode === "library" && libraryError && libraryTracks.length === 0 && (
+            <div className="glass-card" style={{ textAlign: "center" }}>
+              <p style={{ color: "#888", fontSize: "14px" }}>{libraryError}</p>
+              <button
+                onClick={() => {
+                  setLibraryError("");
+                  window.location.reload();
+                }}
+                className="genre-btn active"
+                style={{ marginTop: "12px" }}
+              >
+                再読み込み
+              </button>
             </div>
           )}{" "}
         </>
