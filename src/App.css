@@ -469,10 +469,12 @@ input[type="search"] {
   .song-item {
     display: flex;
     align-items: center;
-    gap: 1.8vw;
-    padding: 2.3vw;
+    gap: 3vw;
+    padding: 3vw;
     border-radius: 12px;
     margin-bottom: 8px;
+    margin-left: 4px;
+    margin-right: 4px;
     background: rgba(255, 255, 255, 0.65);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -488,7 +490,7 @@ input[type="search"] {
   }
 
   .song-title {
-    font-size: 3.3vw;
+    font-size: 3.5vw;
     font-weight: 600;
     color: #1a1a2e;
     white-space: nowrap;
@@ -497,7 +499,7 @@ input[type="search"] {
   }
 
   .song-artist {
-    font-size: 2.7vw;
+    font-size: 3vw;
     color: #888;
   }
 

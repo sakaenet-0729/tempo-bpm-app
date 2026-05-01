@@ -429,6 +429,7 @@ function App() {
                           width: "10vw",
                           height: "10vw",
                           borderRadius: 8,
+                          flexShrink: 0,
                         }}
                       />
                     )}
