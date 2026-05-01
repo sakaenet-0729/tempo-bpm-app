@@ -488,7 +488,7 @@ input[type="search"] {
   }
 
   .song-title {
-    font-size: 3.5vw;
+    font-size: 3.3vw;
     font-weight: 600;
     color: #1a1a2e;
     white-space: nowrap;
@@ -497,7 +497,7 @@ input[type="search"] {
   }
 
   .song-artist {
-    font-size: 3vw;
+    font-size: 2.7vw;
     color: #888;
   }
 
