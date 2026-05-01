@@ -56,9 +56,31 @@ function App() {
   useEffect(() => {
     async function fetchLibrary() {
       if (token) {
+        // キャッシュがあればそれを使う
+        const cached = localStorage.getItem("library_cache");
+        if (cached) {
+          const cachedData = JSON.parse(cached);
+          setLibraryTracks(cachedData);
+          setIsLibraryLoading(false);
+
+          // BPMが未取得の曲だけBPM取得
+          const needsBpm = cachedData.filter((t) => t.bpm === null);
+          for (const track of needsBpm) {
+            await new Promise((r) => setTimeout(r, 1000));
+            const bpm = await getTrackBpm(track.title, track.artist);
+            setLibraryTracks((prev) => {
+              const updated = prev.map((s) =>
+                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+              );
+              localStorage.setItem("library_cache", JSON.stringify(updated));
+              return updated;
+            });
+          }
+          return;
+        }
+
         setIsLibraryLoading(true);
 
-        // いいねした曲を取得
         const likedData = await getMyTracks(token);
         const likedTracks = likedData.items
           .filter((item) => item.track)
@@ -71,17 +93,13 @@ function App() {
             rating: null,
           }));
 
-        // まずいいねした曲だけ表示
         setLibraryTracks(likedTracks);
 
-        // プレイリスト一覧を取得
         const playlists = await getMyPlaylists(token);
+        let playlistTracks = [];
 
-        // プレイリストを1つずつ取得して追加
         for (const pl of playlists) {
-          // 1秒待ってからリクエスト（API制限対策）
           await new Promise((r) => setTimeout(r, 2000));
-
           const items = await getPlaylistTracks(pl.id, token);
           const tracks = items
             .filter((item) => item.track || item.item)
@@ -96,8 +114,9 @@ function App() {
                 rating: null,
               };
             });
+          playlistTracks = [...playlistTracks, ...tracks];
 
-          // 重複を除いて追加
+          // プレイリストごとに画面に追加
           setLibraryTracks((prev) => {
             const existingIds = new Set(prev.map((t) => t.id));
             const newTracks = tracks.filter((t) => !existingIds.has(t.id));
@@ -105,24 +124,28 @@ function App() {
           });
         }
 
+        const allTracks = [...likedTracks, ...playlistTracks];
+        const unique = allTracks.filter(
+          (track, index, self) =>
+            self.findIndex((t) => t.id === track.id) === index,
+        );
+
+        setLibraryTracks(unique);
+        localStorage.setItem("library_cache", JSON.stringify(unique));
         setIsLibraryLoading(false);
 
-        // BPMを順番に取得
-        setLibraryTracks((current) => {
-          const tracksToFetch = [...current];
-          (async () => {
-            for (const track of tracksToFetch) {
-              await new Promise((r) => setTimeout(r, 1000));
-              const bpm = await getTrackBpm(track.title, track.artist);
-              setLibraryTracks((prev) =>
-                prev.map((s) =>
-                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-                ),
-              );
-            }
-          })();
-          return current;
-        });
+        // BPMを取得してキャッシュも更新
+        for (const track of unique) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const bpm = await getTrackBpm(track.title, track.artist);
+          setLibraryTracks((prev) => {
+            const updated = prev.map((s) =>
+              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+            );
+            localStorage.setItem("library_cache", JSON.stringify(updated));
+            return updated;
+          });
+        }
       }
     }
     fetchLibrary();
@@ -367,40 +390,60 @@ function App() {
               {(similarMode === "library"
                 ? libraryMatches
                 : filteredSimilarTracks
-              ).map((song) => (
-                <li
-                  key={song.id}
-                  className="song-item"
-                  style={{
-                    cursor: "pointer",
-                    border: selectedTracks.find((t) => t.id === song.id)
-                      ? "2px solid #00d672"
-                      : "1px solid rgba(255, 255, 255, 0.8)",
-                  }}
-                  onClick={() => toggleTrackSelect(song)}
-                >
-                  {song.image && (
-                    <img
-                      src={song.image}
-                      alt=""
-                      style={{ width: 44, height: 44, borderRadius: 8 }}
-                    />
-                  )}
-                  <div className="song-bpm-badge match-perfect">{song.bpm}</div>
-                  <div className="song-info">
-                    <div className="song-title">{song.title}</div>
-                    <div className="song-artist">{song.artist}</div>
-                  </div>
-                  {song.genre && (
-                    <span
-                      className="genre-btn"
-                      style={{ fontSize: "11px", padding: "4px 8px" }}
+              ).map((song) => {
+                const isSelected = selectedTracks.find((t) => t.id === song.id);
+                return (
+                  <li
+                    key={song.id}
+                    className="song-item"
+                    style={{
+                      cursor: "pointer",
+                      border: isSelected
+                        ? "2px solid #00d672"
+                        : "1px solid rgba(255, 255, 255, 0.8)",
+                    }}
+                    onClick={() => toggleTrackSelect(song)}
+                  >
+                    {song.image && (
+                      <img
+                        src={song.image}
+                        alt=""
+                        style={{
+                          width: "10vw",
+                          height: "10vw",
+                          borderRadius: 8,
+                        }}
+                      />
+                    )}
+                    <div className="song-info">
+                      <div className="song-title">{song.title}</div>
+                      <div className="song-artist">{song.artist}</div>
+                    </div>
+                    {song.genre && (
+                      <span
+                        className="genre-btn"
+                        style={{ fontSize: "11px", padding: "4px 8px" }}
+                      >
+                        {song.genre}
+                      </span>
+                    )}
+                    <div
+                      className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
+                      style={
+                        isSelected
+                          ? {
+                              background: "#00d672",
+                              color: "#fff",
+                              fontSize: "4vw",
+                            }
+                          : {}
+                      }
                     >
-                      {song.genre}
-                    </span>
-                  )}
-                </li>
-              ))}
+                      {isSelected ? "✓" : song.bpm}
+                    </div>
+                  </li>
+                );
+              })}{" "}
             </ul>
           </>
         )}
