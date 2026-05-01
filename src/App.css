@@ -465,7 +465,7 @@ input[type="search"] {
 * レスポンシブ対応
 *
 */
-@media screen and (max-width:480px) {
+@media screen and (max-width:768px) {
   .song-item {
     display: flex;
     align-items: center;
