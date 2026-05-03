@@ -15,7 +15,8 @@ body {
 
 /* ===== App Container ===== */
 .app {
-  max-width: 100%;
+  max-width: 480px;
+  width: 100%;
   margin: 0 auto;
   padding: 32px 16px 100px;
   overflow-x: hidden;
