@@ -408,12 +408,10 @@ function App() {
                     key={song.id}
                     className="song-item"
                     style={{
-                      cursor: "pointer",
-                      border: isSelected
-                        ? "2px solid #00d672"
-                        : "1px solid rgba(255, 255, 255, 0.8)",
+                      cursor:
+                        song.bpm && song.bpm !== 0 ? "pointer" : "default",
                     }}
-                    onClick={() => toggleTrackSelect(song)}
+                    onClick={() => handleSongSelect(song)}
                   >
                     {song.image && (
                       <img
@@ -431,28 +429,17 @@ function App() {
                       <div className="song-title">{song.title}</div>
                       <div className="song-artist">{song.artist}</div>
                     </div>
-                    {song.genre && (
-                      <span
-                        className="genre-btn"
-                        style={{ fontSize: "11px", padding: "4px 8px" }}
-                      >
-                        {song.genre}
-                      </span>
-                    )}
-                    <div
-                      className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
-                      style={
-                        isSelected
-                          ? {
-                              background: "#00d672",
-                              color: "#fff",
-                              fontSize: "4vw",
-                            }
-                          : {}
-                      }
+                    <span
+                      className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
                     >
-                      {isSelected ? "✓" : song.bpm}
-                    </div>
+                      {song.bpm === null ? (
+                        <div className="loading-spinner-small" />
+                      ) : song.bpm === 0 ? (
+                        "-"
+                      ) : (
+                        song.bpm
+                      )}
+                    </span>
                   </li>
                 );
               })}{" "}
