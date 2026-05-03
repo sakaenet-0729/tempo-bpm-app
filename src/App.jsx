@@ -477,7 +477,7 @@ function App() {
                           ? {
                               background: "#00d672",
                               color: "#fff",
-                              fontSize: "4vw",
+                              // fontSize: "4vw",
                             }
                           : {}
                       }
