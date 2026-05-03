@@ -23,7 +23,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [libraryTracks, setLibraryTracks] = useState([]);
   const [libraryQuery, setLibraryQuery] = useState("");
-  const [mode, setMode] = useState("search");
+  const [mode, setMode] = useState("library");
   const [displayCount, setDisplayCount] = useState(50);
   const [selectedSong, setSelectedSong] = useState(null);
   const [similarTracks, setSimilarTracks] = useState([]);
@@ -619,16 +619,16 @@ function App() {
           <div className="glass-card">
             <div className="genre-filter">
               <button
-                className={`genre-btn ${mode === "search" ? "active" : ""}`}
-                onClick={() => setMode("search")}
-              >
-                検索
-              </button>
-              <button
                 className={`genre-btn ${mode === "library" ? "active" : ""}`}
                 onClick={() => setMode("library")}
               >
                 マイライブラリ
+              </button>
+              <button
+                className={`genre-btn ${mode === "search" ? "active" : ""}`}
+                onClick={() => setMode("search")}
+              >
+                検索
               </button>
             </div>
           </div>
