@@ -196,12 +196,6 @@ function App() {
     }
   };
 
-  const handleRating = (id, rating) => {
-    setSearchResults((prev) =>
-      prev.map((song) => (song.id === id ? { ...song, rating } : song)),
-    );
-  };
-
   const handleSongSelect = async (song) => {
     if (!song.bpm || song.bpm === 0) return;
     setSelectedSong(song);
@@ -677,46 +671,29 @@ function App() {
                   <img
                     src={song.image}
                     alt=""
-                    style={{ width: 44, height: 44, borderRadius: 8 }}
+                    style={{
+                      width: "10vw",
+                      height: "10vw",
+                      borderRadius: 8,
+                      flexShrink: 0,
+                    }}
                   />
                 )}
                 <div className="song-info">
                   <div className="song-title">{song.title}</div>
                   <div className="song-artist">{song.artist}</div>
                 </div>
-                <div className="song-actions">
-                  <div className="rating-buttons">
-                    <button
-                      className={`rating-btn good ${song.rating === "good" ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRating(song.id, "good");
-                      }}
-                    >
-                      👍
-                    </button>
-                    <button
-                      className={`rating-btn bad ${song.rating === "bad" ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRating(song.id, "bad");
-                      }}
-                    >
-                      👎
-                    </button>
-                  </div>
-                  <span
-                    className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
-                  >
-                    {song.bpm === null ? (
-                      <div className="loading-spinner-small" />
-                    ) : song.bpm === 0 ? (
-                      "-"
-                    ) : (
-                      song.bpm
-                    )}
-                  </span>
-                </div>
+                <span
+                  className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
+                >
+                  {song.bpm === null ? (
+                    <div className="loading-spinner-small" />
+                  ) : song.bpm === 0 ? (
+                    "-"
+                  ) : (
+                    song.bpm
+                  )}
+                </span>
               </li>
             ))}
           </ul>
