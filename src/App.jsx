@@ -38,6 +38,7 @@ function App() {
   const [libraryMatches, setLibraryMatches] = useState([]);
   const [similarMode, setSimilarMode] = useState("library");
   const [libraryError, setLibraryError] = useState("");
+  const [playingTrackId, setPlayingTrackId] = useState(null);
 
   useEffect(() => {
     async function fetchToken() {
@@ -56,102 +57,16 @@ function App() {
 
   useEffect(() => {
     async function fetchLibrary() {
-      if (token) {
-        // キャッシュがあればそれを使う
-        const cached = localStorage.getItem("library_cache");
-        if (cached) {
-          const cachedData = JSON.parse(cached);
-          setLibraryTracks(cachedData);
+      if (!token) return;
 
-          setLibraryTracks(unique);
-          localStorage.setItem("library_cache", JSON.stringify(unique));
-
-          if (unique.length === 0) {
-            setLibraryError(
-              "データ取得の制限中です。数分後にもう一度お試しください",
-            );
-          }
-
-          setIsLibraryLoading(false);
-
-          // BPMが未取得の曲だけBPM取得
-          const needsBpm = cachedData.filter((t) => t.bpm === null);
-          for (const track of needsBpm) {
-            await new Promise((r) => setTimeout(r, 1000));
-            const bpm = await getTrackBpm(track.title, track.artist);
-            setLibraryTracks((prev) => {
-              const updated = prev.map((s) =>
-                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-              );
-              localStorage.setItem("library_cache", JSON.stringify(updated));
-              return updated;
-            });
-          }
-          return;
-        }
-
-        setIsLibraryLoading(true);
-
-        const likedData = await getMyTracks(token);
-        const likedTracks = likedData.items
-          .filter((item) => item.track)
-          .map((item) => ({
-            id: item.track.id,
-            title: item.track.name,
-            artist: item.track.artists[0].name,
-            bpm: null,
-            image: item.track.album.images[2]?.url,
-            rating: null,
-          }));
-
-        setLibraryTracks(likedTracks);
-
-        const playlists = await getMyPlaylists(token);
-        let playlistTracks = [];
-
-        for (const pl of playlists) {
-          await new Promise((r) => setTimeout(r, 2000));
-          const items = await getPlaylistTracks(pl.id, token);
-          if (items.length === 0 && !cached) {
-            setLibraryError(
-              "データ取得の制限中です。数分後にもう一度お試しください",
-            );
-          }
-          const tracks = items
-            .filter((item) => item.track || item.item)
-            .map((item) => {
-              const t = item.track || item.item;
-              return {
-                id: t.id,
-                title: t.name,
-                artist: t.artists[0].name,
-                bpm: null,
-                image: t.album.images[2]?.url,
-                rating: null,
-              };
-            });
-          playlistTracks = [...playlistTracks, ...tracks];
-
-          // プレイリストごとに画面に追加
-          setLibraryTracks((prev) => {
-            const existingIds = new Set(prev.map((t) => t.id));
-            const newTracks = tracks.filter((t) => !existingIds.has(t.id));
-            return [...prev, ...newTracks];
-          });
-        }
-
-        const allTracks = [...likedTracks, ...playlistTracks];
-        const unique = allTracks.filter(
-          (track, index, self) =>
-            self.findIndex((t) => t.id === track.id) === index,
-        );
-
-        setLibraryTracks(unique);
-        localStorage.setItem("library_cache", JSON.stringify(unique));
+      const cached = localStorage.getItem("library_cache");
+      if (cached) {
+        const cachedData = JSON.parse(cached);
+        setLibraryTracks(cachedData);
         setIsLibraryLoading(false);
 
-        // BPMを取得してキャッシュも更新
-        for (const track of unique) {
+        const needsBpm = cachedData.filter((t) => t.bpm === null);
+        for (const track of needsBpm) {
           await new Promise((r) => setTimeout(r, 1000));
           const bpm = await getTrackBpm(track.title, track.artist);
           setLibraryTracks((prev) => {
@@ -162,20 +77,96 @@ function App() {
             return updated;
           });
         }
+        return;
       }
+
+      setIsLibraryLoading(true);
+
+      const likedData = await getMyTracks(token);
+      const likedTracks = likedData.items
+        .filter((item) => item.track)
+        .map((item) => ({
+          id: item.track.id,
+          title: item.track.name,
+          artist: item.track.artists[0].name,
+          bpm: null,
+          image: item.track.album.images[2]?.url,
+        }));
+
+      setLibraryTracks(likedTracks);
+
+      const playlists = await getMyPlaylists(token);
+
+      for (const pl of playlists) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const items = await getPlaylistTracks(pl.id, token);
+        const tracks = items
+          .filter((item) => item.track || item.item)
+          .map((item) => {
+            const t = item.track || item.item;
+            return {
+              id: t.id,
+              title: t.name,
+              artist: t.artists[0].name,
+              bpm: null,
+              image: t.album.images[2]?.url,
+            };
+          });
+
+        setLibraryTracks((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const newTracks = tracks.filter((t) => !existingIds.has(t.id));
+          return [...prev, ...newTracks];
+        });
+      }
+
+      setLibraryTracks((current) => {
+        const unique = current.filter(
+          (track, index, self) =>
+            self.findIndex((t) => t.id === track.id) === index,
+        );
+        localStorage.setItem("library_cache", JSON.stringify(unique));
+
+        if (unique.length === 0) {
+          setLibraryError(
+            "データ取得の制限中です。数分後にもう一度お試しください",
+          );
+        }
+
+        (async () => {
+          for (const track of unique) {
+            await new Promise((r) => setTimeout(r, 1000));
+            const bpm = await getTrackBpm(track.title, track.artist);
+            setLibraryTracks((prev) => {
+              const updated = prev.map((s) =>
+                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+              );
+              localStorage.setItem("library_cache", JSON.stringify(updated));
+              return updated;
+            });
+          }
+        })();
+
+        return unique;
+      });
+
+      setIsLibraryLoading(false);
     }
     fetchLibrary();
   }, [token]);
 
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
+    localStorage.removeItem("library_cache");
     setToken(null);
     setSearchResults([]);
+    setLibraryTracks([]);
   };
 
   const handleSearch = async () => {
     if (!searchQuery || !token) return;
     setIsSearching(true);
+    setPlayingTrackId(null);
     const tracks = await searchTracks(searchQuery, token);
     const results = tracks.map((track) => ({
       id: track.id,
@@ -183,7 +174,6 @@ function App() {
       artist: track.artists[0].name,
       bpm: null,
       image: track.album.images[2]?.url,
-      rating: null,
     }));
     setSearchResults(results);
     setIsSearching(false);
@@ -203,19 +193,18 @@ function App() {
     setPlaylistName("");
     setSelectedTracks([]);
     setSimilarMode("library");
+    setPlayingTrackId(null);
 
-    // ライブラリ内の同じBPM帯の曲をフィルタ
     const bpmRange = 10;
-    const libraryMatches = libraryTracks.filter(
+    const matches = libraryTracks.filter(
       (t) =>
         t.id !== song.id &&
         t.bpm &&
         t.bpm !== 0 &&
         Math.abs(t.bpm - song.bpm) <= bpmRange,
     );
-    setLibraryMatches(libraryMatches);
+    setLibraryMatches(matches);
 
-    // GetSongBPMからも取得
     const results = await searchByBpm(song.bpm);
     setSimilarTracks(results);
     setIsSimilarLoading(false);
@@ -229,6 +218,7 @@ function App() {
     setSelectedTracks([]);
     setPlaylistCreated(false);
     setSimilarMode("library");
+    setPlayingTrackId(null);
   };
 
   const toggleTrackSelect = (song) => {
@@ -260,7 +250,6 @@ function App() {
           trackUris.push(`spotify:track:${results[0].id}`);
         }
       }
-
       if (trackUris.length > 0) {
         await addTracksToPlaylist(token, playlist.id, trackUris);
       }
@@ -314,7 +303,54 @@ function App() {
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
-  // ===== 類似曲画面 =====
+  const renderEmbedPlayer = () => {
+    if (!playingTrackId) return null;
+    return (
+      <div
+        style={{
+          position: "fixed",
+          bottom: selectedTracks.length > 0 ? "140px" : "72px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "100%",
+          maxWidth: "100%",
+          padding: "0 16px",
+          zIndex: 9,
+        }}
+      >
+        <iframe
+          src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
+          width="100%"
+          height="80"
+          frameBorder="0"
+          allow="autoplay; clipboard-write; encrypted-media"
+          loading="lazy"
+          style={{ borderRadius: "12px" }}
+        />
+      </div>
+    );
+  };
+
+  const renderPlayButton = (songId) => (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        setPlayingTrackId(playingTrackId === songId ? null : songId);
+      }}
+      style={{
+        background: "none",
+        border: "none",
+        fontSize: "18px",
+        cursor: "pointer",
+        padding: "4px",
+        color: playingTrackId === songId ? "#00d672" : "#888",
+        flexShrink: 0,
+      }}
+    >
+      {playingTrackId === songId ? "⏸" : "▶"}
+    </button>
+  );
+
   if (selectedSong) {
     return (
       <div className="app">
@@ -335,12 +371,12 @@ function App() {
         </div>
 
         {isSimilarLoading ? (
-          <p
-            className="section-label"
-            style={{ textAlign: "center", marginTop: "32px" }}
-          >
-            BPM {selectedSong.bpm} の楽曲を検索中...
-          </p>
+          <div style={{ textAlign: "center", marginTop: "32px" }}>
+            <div className="loading-spinner" />
+            <p className="section-label" style={{ marginTop: "12px" }}>
+              BPM {selectedSong.bpm} の楽曲を検索中...
+            </p>
+          </div>
         ) : (
           <>
             <div className="glass-card">
@@ -407,42 +443,55 @@ function App() {
                     key={song.id}
                     className="song-item"
                     style={{
-                      cursor:
-                        song.bpm && song.bpm !== 0 ? "pointer" : "default",
+                      cursor: "pointer",
+                      border: isSelected
+                        ? "2px solid #00d672"
+                        : "1px solid rgba(255, 255, 255, 0.8)",
                     }}
-                    onClick={() => handleSongSelect(song)}
+                    onClick={() => toggleTrackSelect(song)}
                   >
                     {song.image && (
                       <img
                         src={song.image}
                         alt=""
-                        style={{
-                          borderRadius: 8,
-                          flexShrink: 0,
-                        }}
+                        style={{ borderRadius: 8, flexShrink: 0 }}
                       />
                     )}
                     <div className="song-info">
                       <div className="song-title">{song.title}</div>
                       <div className="song-artist">{song.artist}</div>
                     </div>
-                    <span
-                      className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
+                    {song.genre && (
+                      <span
+                        className="genre-btn"
+                        style={{ fontSize: "11px", padding: "4px 8px" }}
+                      >
+                        {song.genre}
+                      </span>
+                    )}
+                    {similarMode === "library" && renderPlayButton(song.id)}
+                    <div
+                      className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
+                      style={
+                        isSelected
+                          ? {
+                              background: "#00d672",
+                              color: "#fff",
+                              fontSize: "4vw",
+                            }
+                          : {}
+                      }
                     >
-                      {song.bpm === null ? (
-                        <div className="loading-spinner-small" />
-                      ) : song.bpm === 0 ? (
-                        "-"
-                      ) : (
-                        song.bpm
-                      )}
-                    </span>
+                      {isSelected ? "✓" : song.bpm}
+                    </div>
                   </li>
                 );
-              })}{" "}
+              })}
             </ul>
           </>
         )}
+
+        {renderEmbedPlayer()}
 
         {selectedTracks.length > 0 && (
           <div
@@ -452,7 +501,7 @@ function App() {
               left: "50%",
               transform: "translateX(-50%)",
               width: "100%",
-              maxWidth: "420px",
+              maxWidth: "100%",
               padding: "0 16px",
               zIndex: 10,
             }}
@@ -541,7 +590,6 @@ function App() {
     );
   }
 
-  // ===== 通常画面 =====
   return (
     <div className="app">
       <div className="app-header">
@@ -584,6 +632,7 @@ function App() {
               </button>
             </div>
           </div>
+
           {mode === "search" && (
             <div className="glass-card">
               <p className="section-label">SEARCH TRACKS</p>
@@ -601,6 +650,36 @@ function App() {
               </div>
             </div>
           )}
+
+          {mode === "library" && (
+            <div className="glass-card">
+              <p className="section-label">MY LIBRARY</p>
+              {isLibraryLoading ? (
+                <div style={{ textAlign: "center", padding: "16px" }}>
+                  <div className="loading-spinner" />
+                  <p
+                    style={{
+                      color: "#888",
+                      marginTop: "8px",
+                      fontSize: "13px",
+                    }}
+                  >
+                    ライブラリを読み込み中...
+                  </p>
+                </div>
+              ) : (
+                <div className="search-box">
+                  <input
+                    type="text"
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    placeholder="ライブラリ内を検索"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {mode === "library" && libraryError && libraryTracks.length === 0 && (
             <div className="glass-card" style={{ textAlign: "center" }}>
               <p style={{ color: "#888", fontSize: "14px" }}>{libraryError}</p>
@@ -620,7 +699,14 @@ function App() {
         </>
       )}
 
-      {isSearching && <p className="section-label">検索中...</p>}
+      {isSearching && (
+        <div style={{ textAlign: "center", marginTop: "32px" }}>
+          <div className="loading-spinner" />
+          <p className="section-label" style={{ marginTop: "12px" }}>
+            検索中...
+          </p>
+        </div>
+      )}
 
       {((mode === "search" && searchResults.length > 0) ||
         (mode === "library" && libraryTracks.length > 0)) && (
@@ -628,13 +714,15 @@ function App() {
           <div className="bpm-display">
             <span className="bpm-value">{targetBpm}</span>
             <span className="bpm-label">BPM</span>
-          </div>{" "}
+          </div>
+
           <BpmFilter
             minBpm={minBpm}
             maxBpm={maxBpm}
             onMinChange={setMinBpm}
             onMaxChange={setMaxBpm}
           />
+
           <p className="section-label">
             {mode === "search"
               ? filteredResults.length
@@ -655,16 +743,14 @@ function App() {
                   <img
                     src={song.image}
                     alt=""
-                    style={{
-                      borderRadius: 8,
-                      flexShrink: 0,
-                    }}
+                    style={{ borderRadius: 8, flexShrink: 0 }}
                   />
                 )}
                 <div className="song-info">
                   <div className="song-title">{song.title}</div>
                   <div className="song-artist">{song.artist}</div>
                 </div>
+                {renderPlayButton(song.id)}
                 <span
                   className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
                 >
@@ -679,7 +765,9 @@ function App() {
               </li>
             ))}
           </ul>
-          {isSearching && <p className="section-label">検索中...</p>}
+
+          {renderEmbedPlayer()}
+
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length &&
             !isLoadingMore && (
@@ -698,6 +786,7 @@ function App() {
                 {filteredLibraryTracks.length - displayCount}曲）
               </button>
             )}
+
           {isLoadingMore && (
             <div style={{ textAlign: "center", margin: "16px 0" }}>
               <div className="loading-spinner" />
