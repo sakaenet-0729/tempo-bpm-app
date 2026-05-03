@@ -212,6 +212,11 @@ body {
   overflow: hidden;
 }
 
+.song-item img {
+  width: 50px;
+  height: 50px;
+}
+
 .song-info {
   flex: 1;
   min-width: 0;
@@ -481,6 +486,11 @@ input[type="search"] {
     transition: transform 0.15s ease;
     overflow: hidden;
     max-width: 100%;
+  }
+
+  .song-item img {
+    width: "10vw";
+    height: "10vw";
   }
 
   .song-info {

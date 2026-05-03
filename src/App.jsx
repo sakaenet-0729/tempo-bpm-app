@@ -417,8 +417,6 @@ function App() {
                         src={song.image}
                         alt=""
                         style={{
-                          width: "10vw",
-                          height: "10vw",
                           borderRadius: 8,
                           flexShrink: 0,
                         }}
@@ -658,8 +656,6 @@ function App() {
                     src={song.image}
                     alt=""
                     style={{
-                      width: "10vw",
-                      height: "10vw",
                       borderRadius: 8,
                       flexShrink: 0,
                     }}
