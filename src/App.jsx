@@ -38,7 +38,6 @@ function App() {
   const [libraryMatches, setLibraryMatches] = useState([]);
   const [similarMode, setSimilarMode] = useState("library");
   const [libraryError, setLibraryError] = useState("");
-  const [libraryError, setLibraryError] = useState("");
 
   useEffect(() => {
     async function fetchToken() {
