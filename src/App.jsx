@@ -191,7 +191,7 @@ function App() {
     setIsSimilarLoading(true);
     setSimilarGenre("All");
     setPlaylistName("");
-    setSelectedTracks([]);
+    setSelectedTracks([song]);
     setSimilarMode("library");
     setPlayingTrackId(null);
 
