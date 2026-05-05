@@ -507,9 +507,51 @@ function App() {
           </>
         )}
 
-        {renderEmbedPlayer()}
+        {(playingTrackId || selectedTracks.length > 0) && (
+          <div className="floating-controls">
+            {playingTrackId && (
+              <div className="floating-embed">
+                <iframe
+                  src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
+                  allow="autoplay; clipboard-write; encrypted-media"
+                  loading="lazy"
+                />
+              </div>
+            )}
 
-        {selectedTracks.length > 0 && (
+            {selectedTracks.length > 0 && (
+              <div className="floating-playlist">
+                <div className="search-box" style={{ marginBottom: "8px" }}>
+                  <input
+                    type="text"
+                    value={playlistName}
+                    onChange={(e) => setPlaylistName(e.target.value)}
+                    placeholder="プレイリストに名前を追加"
+                    style={{ fontSize: "13px" }}
+                  />
+                </div>
+                <button
+                  onClick={handleCreatePlaylist}
+                  className="genre-btn active"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "15px",
+                    borderRadius: "10px",
+                  }}
+                  disabled={isCreatingPlaylist}
+                >
+                  {isCreatingPlaylist
+                    ? "作成中..."
+                    : `${selectedTracks.length}曲でプレイリスト作成`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {(playingTrackId || selectedTracks.length > 0) && (
           <div
             style={{
               position: "fixed",
@@ -520,43 +562,60 @@ function App() {
               maxWidth: "100%",
               padding: "0 16px",
               zIndex: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
             }}
           >
-            <div
-              style={{
-                background: "rgba(255, 255, 255, 0.95)",
-                backdropFilter: "blur(20px)",
-                borderRadius: "16px",
-                padding: "12px",
-                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
-              }}
-            >
-              <div className="search-box" style={{ marginBottom: "8px" }}>
-                <input
-                  type="text"
-                  value={playlistName}
-                  onChange={(e) => setPlaylistName(e.target.value)}
-                  placeholder="プレイリストに名前を追加"
-                  style={{ fontSize: "13px" }}
-                />
-              </div>
-              <button
-                onClick={handleCreatePlaylist}
-                className="genre-btn active"
+            {playingTrackId && (
+              <iframe
+                src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
+                width="100%"
+                height="80"
+                frameBorder="0"
+                allow="autoplay; clipboard-write; encrypted-media"
+                loading="lazy"
+                style={{ borderRadius: "12px" }}
+              />
+            )}
+
+            {selectedTracks.length > 0 && (
+              <div
                 style={{
-                  display: "block",
-                  width: "100%",
+                  background: "rgba(255, 255, 255, 0.95)",
+                  backdropFilter: "blur(20px)",
+                  borderRadius: "16px",
                   padding: "12px",
-                  fontSize: "15px",
-                  borderRadius: "10px",
+                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
                 }}
-                disabled={isCreatingPlaylist}
               >
-                {isCreatingPlaylist
-                  ? "作成中..."
-                  : `${selectedTracks.length}曲でプレイリスト作成`}
-              </button>
-            </div>
+                <div className="search-box" style={{ marginBottom: "8px" }}>
+                  <input
+                    type="text"
+                    value={playlistName}
+                    onChange={(e) => setPlaylistName(e.target.value)}
+                    placeholder="プレイリストに名前を追加"
+                    style={{ fontSize: "13px" }}
+                  />
+                </div>
+                <button
+                  onClick={handleCreatePlaylist}
+                  className="genre-btn active"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "15px",
+                    borderRadius: "10px",
+                  }}
+                  disabled={isCreatingPlaylist}
+                >
+                  {isCreatingPlaylist
+                    ? "作成中..."
+                    : `${selectedTracks.length}曲でプレイリスト作成`}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
