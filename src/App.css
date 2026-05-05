@@ -465,6 +465,36 @@ input[type="search"] {
   /* 見た目を小さくしたい場合は、後述のtransformで縮小する */
 }
 
+.floating-controls {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 100%;
+  padding: 0 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.floating-embed iframe {
+  width: 100%;
+  height: 80px;
+  border: none;
+  border-radius: 12px;
+}
+
+.floating-playlist {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
 /* 
 *
 * レスポンシブ対応

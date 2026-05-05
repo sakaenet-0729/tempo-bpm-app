@@ -309,7 +309,7 @@ function App() {
       <div
         style={{
           position: "fixed",
-          bottom: selectedTracks.length > 0 ? "140px" : "72px",
+          bottom: selectedTracks.length > 0 ? "200px" : "72px",
           left: "50%",
           transform: "translateX(-50%)",
           width: "100%",
@@ -330,12 +330,28 @@ function App() {
       </div>
     );
   };
-
-  const renderPlayButton = (songId) => (
+  const renderPlayButton = (song) => (
     <button
-      onClick={(e) => {
+      onClick={async (e) => {
         e.stopPropagation();
-        setPlayingTrackId(playingTrackId === songId ? null : songId);
+        if (playingTrackId === song.id) {
+          setPlayingTrackId(null);
+          return;
+        }
+        // track IDがSpotifyのIDならそのまま使う
+        // GetSongBPMのIDならSpotifyで検索してからEmbed
+        if (song.id && song.id.length === 22) {
+          setPlayingTrackId(song.id);
+        } else {
+          // Spotifyで検索してtrack IDを取得
+          const results = await searchTracks(
+            `${song.title} ${song.artist}`,
+            token,
+          );
+          if (results.length > 0) {
+            setPlayingTrackId(results[0].id);
+          }
+        }
       }}
       style={{
         background: "none",
@@ -343,11 +359,11 @@ function App() {
         fontSize: "18px",
         cursor: "pointer",
         padding: "4px",
-        color: playingTrackId === songId ? "#00d672" : "#888",
+        color: playingTrackId === song.id ? "#00d672" : "#888",
         flexShrink: 0,
       }}
     >
-      {playingTrackId === songId ? "⏸" : "▶"}
+      {playingTrackId === song.id ? "⏸" : "▶"}
     </button>
   );
 
@@ -469,7 +485,7 @@ function App() {
                         {song.genre}
                       </span>
                     )}
-                    {similarMode === "library" && renderPlayButton(song.id)}
+                    {similarMode === "library" && renderPlayButton(song)}
                     <div
                       className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
                       style={
@@ -750,7 +766,7 @@ function App() {
                   <div className="song-title">{song.title}</div>
                   <div className="song-artist">{song.artist}</div>
                 </div>
-                {renderPlayButton(song.id)}
+                {renderPlayButton(song)}
                 <span
                   className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
                 >
