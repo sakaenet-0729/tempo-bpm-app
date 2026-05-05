@@ -18,7 +18,8 @@ body {
   max-width: 480px;
   width: 100%;
   margin: 0 auto;
-  padding: 32px 16px 180px;
+  padding: 32px 16px 300px;
+  /* padding: 32px 16px 180px; */
   overflow-x: hidden;
 }
 
