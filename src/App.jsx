@@ -308,10 +308,10 @@ function App() {
     return (
       <div
         style={{
-          position: "fixed",
+          // position: "fixed",
           bottom: selectedTracks.length > 0 ? "200px" : "72px",
-          left: "50%",
-          transform: "translateX(-50%)",
+          // left: "50%",
+          // transform: "translateX(-50%)",
           width: "100%",
           maxWidth: "100%",
           padding: "0 16px",
@@ -507,8 +507,6 @@ function App() {
           </>
         )}
 
-        {renderEmbedPlayer()}
-
         {selectedTracks.length > 0 && (
           <div
             style={{
@@ -522,6 +520,7 @@ function App() {
               zIndex: 10,
             }}
           >
+            {renderEmbedPlayer()}
             <div
               style={{
                 background: "rgba(255, 255, 255, 0.95)",
