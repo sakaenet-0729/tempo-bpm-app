@@ -1,6 +1,6 @@
-import jwt from "jsonwebtoken";
+const jwt = require("jsonwebtoken");
 
-export default function handler(req, res) {
+module.exports = function handler(req, res) {
   const privateKey = process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, "\n");
   const teamId = process.env.APPLE_TEAM_ID;
   const keyId = process.env.APPLE_KEY_ID;
@@ -16,4 +16,4 @@ export default function handler(req, res) {
   });
 
   res.status(200).json({ token });
-}
+};
