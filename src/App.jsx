@@ -13,6 +13,7 @@ import {
   createPlaylist,
   addTracksToPlaylist,
 } from "./spotify";
+import { searchAppleMusic } from "./applemusic";
 
 function App() {
   const [minBpm, setMinBpm] = useState(60);
@@ -39,6 +40,7 @@ function App() {
   const [similarMode, setSimilarMode] = useState("library");
   const [libraryError, setLibraryError] = useState("");
   const [playingTrackId, setPlayingTrackId] = useState(null);
+  const [musicService, setMusicService] = useState("spotify");
 
   useEffect(() => {
     async function fetchToken() {
@@ -164,19 +166,29 @@ function App() {
   };
 
   const handleSearch = async () => {
-    if (!searchQuery || !token) return;
+    if (!searchQuery) return;
+    if (musicService === "spotify" && !token) return;
     setIsSearching(true);
     setPlayingTrackId(null);
-    const tracks = await searchTracks(searchQuery, token);
-    const results = tracks.map((track) => ({
-      id: track.id,
-      title: track.name,
-      artist: track.artists[0].name,
-      bpm: null,
-      image: track.album.images[2]?.url,
-    }));
+
+    let results = [];
+
+    if (musicService === "spotify") {
+      const tracks = await searchTracks(searchQuery, token);
+      results = tracks.map((track) => ({
+        id: track.id,
+        title: track.name,
+        artist: track.artists[0].name,
+        bpm: null,
+        image: track.album.images[2]?.url,
+      }));
+    } else {
+      results = await searchAppleMusic(searchQuery);
+    }
+
     setSearchResults(results);
     setIsSearching(false);
+
     for (const result of results) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
@@ -619,7 +631,6 @@ function App() {
           </div>
         )}
 
-
         {playlistCreated && (
           <div
             style={{
@@ -712,6 +723,20 @@ function App() {
           {mode === "search" && (
             <div className="glass-card">
               <p className="section-label">SEARCH TRACKS</p>
+              <div className="genre-filter" style={{ marginBottom: "12px" }}>
+                <button
+                  className={`genre-btn ${musicService === "spotify" ? "active" : ""}`}
+                  onClick={() => setMusicService("spotify")}
+                >
+                  Spotify
+                </button>
+                <button
+                  className={`genre-btn ${musicService === "apple" ? "active" : ""}`}
+                  onClick={() => setMusicService("apple")}
+                >
+                  Apple Music
+                </button>
+              </div>
               <div className="search-box">
                 <input
                   type="text"
