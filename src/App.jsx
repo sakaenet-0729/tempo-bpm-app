@@ -18,6 +18,8 @@ import {
   loginWithAppleMusic,
   searchAppleMusic,
   getAppleMusicLibrary,
+  playAppleMusicTrack,
+  pauseAppleMusic,
 } from "./applemusic";
 
 function App() {
@@ -351,6 +353,7 @@ function App() {
 
   const renderEmbedPlayer = () => {
     if (!playingTrackId) return null;
+    if (musicService === "apple") return null;
     return (
       <div
         style={{
@@ -376,26 +379,24 @@ function App() {
       </div>
     );
   };
+
   const renderPlayButton = (song) => (
     <button
       onClick={async (e) => {
         e.stopPropagation();
         if (playingTrackId === song.id) {
           setPlayingTrackId(null);
+          if (musicService === "apple") {
+            pauseAppleMusic();
+          }
           return;
         }
-        // track IDがSpotifyのIDならそのまま使う
-        // GetSongBPMのIDならSpotifyで検索してからEmbed
-        if (song.id && song.id.length === 22) {
-          setPlayingTrackId(song.id);
-        } else {
-          // Spotifyで検索してtrack IDを取得
-          const results = await searchTracks(
-            `${song.title} ${song.artist}`,
-            token,
-          );
-          if (results.length > 0) {
-            setPlayingTrackId(results[0].id);
+        setPlayingTrackId(song.id);
+        if (musicService === "apple") {
+          try {
+            await playAppleMusicTrack(song.id);
+          } catch (err) {
+            console.error("Apple Music play error:", err);
           }
         }
       }}
@@ -412,7 +413,6 @@ function App() {
       {playingTrackId === song.id ? "⏸" : "▶"}
     </button>
   );
-
   if (selectedSong) {
     return (
       <div className="app">

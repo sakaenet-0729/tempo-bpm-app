@@ -70,3 +70,14 @@ export async function getAppleMusicLibrary() {
   }
   return [];
 }
+
+export async function playAppleMusicTrack(songId) {
+  const music = MusicKit.getInstance();
+  await music.setQueue({ song: songId });
+  await music.play();
+}
+
+export function pauseAppleMusic() {
+  const music = MusicKit.getInstance();
+  music.pause();
+}
