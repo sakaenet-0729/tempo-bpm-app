@@ -13,7 +13,13 @@ import {
   createPlaylist,
   addTracksToPlaylist,
 } from "./spotify";
+
 import { searchAppleMusic } from "./applemusic";
+import {
+  loginWithAppleMusic,
+  searchAppleMusic,
+  getAppleMusicLibrary,
+} from "./applemusic";
 
 function App() {
   const [minBpm, setMinBpm] = useState(60);
@@ -41,6 +47,7 @@ function App() {
   const [libraryError, setLibraryError] = useState("");
   const [playingTrackId, setPlayingTrackId] = useState(null);
   const [musicService, setMusicService] = useState("spotify");
+  const [appleMusicInstance, setAppleMusicInstance] = useState(null);
 
   useEffect(() => {
     async function fetchToken() {
@@ -61,7 +68,33 @@ function App() {
     async function fetchLibrary() {
       if (!token) return;
 
+      // Apple Musicの場合
+      if (musicService === "apple") {
+        setIsLibraryLoading(true);
+        try {
+          const tracks = await getAppleMusicLibrary();
+          setLibraryTracks(tracks);
+          setIsLibraryLoading(false);
+
+          for (const track of tracks) {
+            await new Promise((r) => setTimeout(r, 1000));
+            const bpm = await getTrackBpm(track.title, track.artist);
+            setLibraryTracks((prev) =>
+              prev.map((s) =>
+                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+              ),
+            );
+          }
+        } catch (err) {
+          console.error("Apple Music library error:", err);
+          setIsLibraryLoading(false);
+        }
+        return;
+      }
+
+      // Spotifyの場合（既存のコード）
       const cached = localStorage.getItem("library_cache");
+
       if (cached) {
         const cachedData = JSON.parse(cached);
         setLibraryTracks(cachedData);
@@ -155,7 +188,7 @@ function App() {
       setIsLibraryLoading(false);
     }
     fetchLibrary();
-  }, [token]);
+  }, [token, musicService]);
 
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
@@ -682,9 +715,36 @@ function App() {
       <div className="app-header">
         <h1>TEMPO</h1>
         {!token ? (
-          <button className="genre-btn active" onClick={loginWithSpotify}>
-            Spotifyログイン
-          </button>
+          <div className="glass-card" style={{ textAlign: "center" }}>
+            <p className="section-label">ログイン</p>
+            <div className="genre-filter" style={{ justifyContent: "center" }}>
+              <button
+                className="genre-btn active"
+                onClick={() => {
+                  setMusicService("spotify");
+                  loginWithSpotify();
+                }}
+              >
+                Spotify
+              </button>
+              <button
+                className="genre-btn active"
+                onClick={async () => {
+                  try {
+                    const music = await loginWithAppleMusic();
+                    setAppleMusicInstance(music);
+                    setMusicService("apple");
+                    setToken("apple-music-authorized");
+                  } catch (err) {
+                    console.error("Apple Music login failed:", err);
+                  }
+                }}
+                style={{ background: "#fc3c44" }}
+              >
+                Apple Music
+              </button>
+            </div>
+          </div>
         ) : (
           <button
             onClick={handleLogout}
