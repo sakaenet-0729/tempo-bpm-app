@@ -14,7 +14,6 @@ import {
   addTracksToPlaylist,
 } from "./spotify";
 
-import { searchAppleMusic } from "./applemusic";
 import {
   loginWithAppleMusic,
   searchAppleMusic,
@@ -196,6 +195,8 @@ function App() {
     setToken(null);
     setSearchResults([]);
     setLibraryTracks([]);
+    setMusicService("spotify");
+    setAppleMusicInstance(null);
   };
 
   const handleSearch = async () => {
