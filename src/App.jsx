@@ -51,6 +51,7 @@ function App() {
   const [musicService, setMusicService] = useState("spotify");
   const [appleMusicInstance, setAppleMusicInstance] = useState(null);
 
+  // ===== トークン取得 =====
   useEffect(() => {
     async function fetchToken() {
       const accessToken = await getAccessToken();
@@ -66,6 +67,7 @@ function App() {
     }
   }, []);
 
+  // ===== ライブラリ取得 =====
   useEffect(() => {
     async function fetchLibrary() {
       if (!token) return;
@@ -94,7 +96,7 @@ function App() {
         return;
       }
 
-      // Spotifyの場合（既存のコード）
+      // Spotifyの場合
       const cached = localStorage.getItem("library_cache");
 
       if (cached) {
@@ -192,6 +194,7 @@ function App() {
     fetchLibrary();
   }, [token, musicService]);
 
+  // ===== ハンドラー =====
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
     localStorage.removeItem("library_cache");
@@ -268,6 +271,9 @@ function App() {
     setPlaylistCreated(false);
     setSimilarMode("library");
     setPlayingTrackId(null);
+    if (musicService === "apple") {
+      pauseAppleMusic();
+    }
   };
 
   const toggleTrackSelect = (song) => {
@@ -322,6 +328,7 @@ function App() {
     setTimeout(() => setPlaylistCreated(false), 3000);
   };
 
+  // ===== フィルタリング =====
   const filteredResults = searchResults
     .filter((song) => {
       if (song.bpm === null) return true;
@@ -365,35 +372,7 @@ function App() {
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
-  const renderEmbedPlayer = () => {
-    if (!playingTrackId) return null;
-    if (musicService === "apple") return null;
-    return (
-      <div
-        style={{
-          position: "fixed",
-          bottom: selectedTracks.length > 0 ? "200px" : "72px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "100%",
-          maxWidth: "100%",
-          padding: "0 16px",
-          zIndex: 9,
-        }}
-      >
-        <iframe
-          src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
-          width="100%"
-          height="80"
-          frameBorder="0"
-          allow="autoplay; clipboard-write; encrypted-media"
-          loading="lazy"
-          style={{ borderRadius: "12px" }}
-        />
-      </div>
-    );
-  };
-
+  // ===== 再生ボタン =====
   const renderPlayButton = (song) => (
     <button
       onClick={async (e) => {
@@ -427,6 +406,90 @@ function App() {
       {playingTrackId === song.id ? "⏸" : "▶"}
     </button>
   );
+
+  // ===== フローティングコントロール =====
+  const renderFloatingControls = () => {
+    const hasEmbed = musicService === "spotify" && playingTrackId;
+    const hasPlaylist = selectedTracks.length > 0;
+
+    if (!hasEmbed && !hasPlaylist) return null;
+
+    return (
+      <div className="floating-controls">
+        {hasEmbed && (
+          <div className="floating-embed">
+            <iframe
+              src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
+              allow="autoplay; clipboard-write; encrypted-media"
+              loading="lazy"
+            />
+          </div>
+        )}
+
+        {hasPlaylist && (
+          <div className="floating-playlist">
+            <div className="search-box" style={{ marginBottom: "8px" }}>
+              <input
+                type="text"
+                value={playlistName}
+                onChange={(e) => setPlaylistName(e.target.value)}
+                placeholder="プレイリストに名前を追加"
+                style={{ fontSize: "13px" }}
+              />
+            </div>
+            <button
+              onClick={handleCreatePlaylist}
+              className="genre-btn active"
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "12px",
+                fontSize: "15px",
+                borderRadius: "10px",
+              }}
+              disabled={isCreatingPlaylist}
+            >
+              {isCreatingPlaylist
+                ? "作成中..."
+                : `${selectedTracks.length}曲でプレイリスト作成`}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ===== プレイリスト作成完了メッセージ =====
+  const renderPlaylistCreatedMessage = () => {
+    if (!playlistCreated) return null;
+    const serviceName = musicService === "apple" ? "Apple Music" : "Spotify";
+    return (
+      <div
+        style={{
+          position: "fixed",
+          bottom: "120px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 20,
+        }}
+      >
+        <p
+          style={{
+            color: "#00d672",
+            fontSize: "14px",
+            background: "rgba(255,255,255,0.9)",
+            padding: "8px 16px",
+            borderRadius: "8px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+          }}
+        >
+          ✓ {serviceName}にプレイリストを作成しました！
+        </p>
+      </div>
+    );
+  };
+
+  // ===== 類似曲画面 =====
   if (selectedSong) {
     return (
       <div className="app">
@@ -545,16 +608,12 @@ function App() {
                         {song.genre}
                       </span>
                     )}
-                    {similarMode === "library" && renderPlayButton(song)}
+                    {renderPlayButton(song)}
                     <div
                       className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
                       style={
                         isSelected
-                          ? {
-                              background: "#00d672",
-                              color: "#fff",
-                              // fontSize: "4vw",
-                            }
+                          ? { background: "#00d672", color: "#fff" }
                           : {}
                       }
                     >
@@ -567,141 +626,8 @@ function App() {
           </>
         )}
 
-        {(playingTrackId || selectedTracks.length > 0) && (
-          <div className="floating-controls">
-            {playingTrackId && (
-              <div className="floating-embed">
-                <iframe
-                  src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
-                  allow="autoplay; clipboard-write; encrypted-media"
-                  loading="lazy"
-                />
-              </div>
-            )}
-
-            {selectedTracks.length > 0 && (
-              <div className="floating-playlist">
-                <div className="search-box" style={{ marginBottom: "8px" }}>
-                  <input
-                    type="text"
-                    value={playlistName}
-                    onChange={(e) => setPlaylistName(e.target.value)}
-                    placeholder="プレイリストに名前を追加"
-                    style={{ fontSize: "13px" }}
-                  />
-                </div>
-                <button
-                  onClick={handleCreatePlaylist}
-                  className="genre-btn active"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: "12px",
-                    fontSize: "15px",
-                    borderRadius: "10px",
-                  }}
-                  disabled={isCreatingPlaylist}
-                >
-                  {isCreatingPlaylist
-                    ? "作成中..."
-                    : `${selectedTracks.length}曲でプレイリスト作成`}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {(playingTrackId || selectedTracks.length > 0) && (
-          <div
-            style={{
-              position: "fixed",
-              bottom: "72px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: "100%",
-              maxWidth: "100%",
-              padding: "0 16px",
-              zIndex: 10,
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-            }}
-          >
-            {playingTrackId && (
-              <iframe
-                src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
-                width="100%"
-                height="80"
-                frameBorder="0"
-                allow="autoplay; clipboard-write; encrypted-media"
-                loading="lazy"
-                style={{ borderRadius: "12px" }}
-              />
-            )}
-
-            {selectedTracks.length > 0 && (
-              <div
-                style={{
-                  background: "rgba(255, 255, 255, 0.95)",
-                  backdropFilter: "blur(20px)",
-                  borderRadius: "16px",
-                  padding: "12px",
-                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
-                }}
-              >
-                <div className="search-box" style={{ marginBottom: "8px" }}>
-                  <input
-                    type="text"
-                    value={playlistName}
-                    onChange={(e) => setPlaylistName(e.target.value)}
-                    placeholder="プレイリストに名前を追加"
-                    style={{ fontSize: "13px" }}
-                  />
-                </div>
-                <button
-                  onClick={handleCreatePlaylist}
-                  className="genre-btn active"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: "12px",
-                    fontSize: "15px",
-                    borderRadius: "10px",
-                  }}
-                  disabled={isCreatingPlaylist}
-                >
-                  {isCreatingPlaylist
-                    ? "作成中..."
-                    : `${selectedTracks.length}曲でプレイリスト作成`}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {playlistCreated && (
-          <div
-            style={{
-              position: "fixed",
-              bottom: "120px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              zIndex: 10,
-            }}
-          >
-            <p
-              style={{
-                color: "#00d672",
-                fontSize: "14px",
-                background: "rgba(255,255,255,0.9)",
-                padding: "8px 16px",
-                borderRadius: "8px",
-              }}
-            >
-              ✓ Spotifyにプレイリストを作成しました！
-            </p>
-          </div>
-        )}
+        {renderFloatingControls()}
+        {renderPlaylistCreatedMessage()}
 
         <div className="bottom-nav">
           <button className="nav-item">
@@ -725,6 +651,7 @@ function App() {
     );
   }
 
+  // ===== 通常画面 =====
   return (
     <div className="app">
       <div className="app-header">
@@ -798,20 +725,6 @@ function App() {
           {mode === "search" && (
             <div className="glass-card">
               <p className="section-label">SEARCH TRACKS</p>
-              <div className="genre-filter" style={{ marginBottom: "12px" }}>
-                <button
-                  className={`genre-btn ${musicService === "spotify" ? "active" : ""}`}
-                  onClick={() => setMusicService("spotify")}
-                >
-                  Spotify
-                </button>
-                <button
-                  className={`genre-btn ${musicService === "apple" ? "active" : ""}`}
-                  onClick={() => setMusicService("apple")}
-                >
-                  Apple Music
-                </button>
-              </div>
               <div className="search-box">
                 <input
                   type="text"
@@ -942,7 +855,7 @@ function App() {
             ))}
           </ul>
 
-          {musicService === "spotify" && renderEmbedPlayer()}
+          {renderFloatingControls()}
 
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length &&
