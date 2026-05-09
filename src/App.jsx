@@ -252,10 +252,7 @@ function App() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isLoadingMore) {
-          if (
-            mode === "library" &&
-            displayCount < filteredLibraryTracks.length
-          ) {
+          if (mode === "library") {
             setIsLoadingMore(true);
             setTimeout(() => {
               setDisplayCount((prev) => prev + 50);
@@ -269,7 +266,7 @@ function App() {
 
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [displayCount, filteredLibraryTracks.length, isLoadingMore, mode]);
+  }, [displayCount, libraryTracks.length, isLoadingMore, mode]);
 
   // ===== ハンドラー =====
   const handleLogout = () => {
@@ -896,14 +893,12 @@ function App() {
             <span className="bpm-value">{targetBpm}</span>
             <span className="bpm-label">BPM</span>
           </div>
-
           <BpmFilter
             minBpm={minBpm}
             maxBpm={maxBpm}
             onMinChange={setMinBpm}
             onMaxChange={setMaxBpm}
           />
-
           <p className="section-label">
             {mode === "search"
               ? filteredResults.length
@@ -946,9 +941,7 @@ function App() {
               </li>
             ))}
           </ul>
-
           {renderFloatingControls()}
-
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length && (
               <div
@@ -957,7 +950,7 @@ function App() {
               >
                 <div className="loading-spinner" />
               </div>
-            )}
+            )}{" "}
         </>
       )}
 
