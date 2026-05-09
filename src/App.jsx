@@ -50,6 +50,7 @@ function App() {
   const [playingTrackId, setPlayingTrackId] = useState(null);
   const [musicService, setMusicService] = useState("spotify");
   const [appleMusicInstance, setAppleMusicInstance] = useState(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   // ===== トークン取得 =====
   useEffect(() => {
@@ -65,6 +66,7 @@ function App() {
         } catch (err) {
           console.error("Apple Music auto-login failed:", err);
         }
+        setIsInitializing(false);
         return;
       }
 
@@ -79,6 +81,7 @@ function App() {
           setToken(accessToken);
         }
       }
+      setIsInitializing(false);
     }
     init();
   }, []);
@@ -392,10 +395,9 @@ function App() {
     .filter((song) => {
       if (libraryQuery) {
         const q = libraryQuery.toLowerCase();
-        return (
-          song.title.toLowerCase().includes(q) ||
-          song.artist.toLowerCase().includes(q)
-        );
+        const title = (song.title || "").toLowerCase();
+        const artist = (song.artist || "").toLowerCase();
+        return title.includes(q) || artist.includes(q);
       }
       return true;
     })
@@ -536,6 +538,18 @@ function App() {
       </div>
     );
   };
+
+  // ===== 初期化中 =====
+  if (isInitializing) {
+    return (
+      <div className="app" style={{ textAlign: "center", paddingTop: "40vh" }}>
+        <div className="loading-spinner" />
+        <p className="section-label" style={{ marginTop: "12px" }}>
+          TEMPO
+        </p>
+      </div>
+    );
+  }
 
   // ===== 類似曲画面 =====
   if (selectedSong) {
