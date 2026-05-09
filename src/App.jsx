@@ -942,7 +942,7 @@ function App() {
             ))}
           </ul>
 
-          {renderEmbedPlayer()}
+          {musicService === "spotify" && renderEmbedPlayer()}
 
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length &&

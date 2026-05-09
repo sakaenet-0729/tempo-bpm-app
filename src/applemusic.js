@@ -55,20 +55,35 @@ export async function searchAppleMusic(query) {
 
 export async function getAppleMusicLibrary() {
   const music = MusicKit.getInstance();
-  const result = await music.api.music("/v1/me/library/songs", { limit: 100 });
+  let allTracks = [];
+  let offset = 0;
+  const limit = 100;
 
-  if (result.data.data) {
-    return result.data.data.map((song) => ({
-      id: song.id,
-      title: song.attributes.name,
-      artist: song.attributes.artistName,
-      bpm: null,
-      image: song.attributes.artwork?.url
-        ?.replace("{w}", "64")
-        ?.replace("{h}", "64"),
-    }));
+  while (true) {
+    const result = await music.api.music(
+      `/v1/me/library/songs?limit=${limit}&offset=${offset}`,
+    );
+
+    if (result.data.data && result.data.data.length > 0) {
+      const tracks = result.data.data.map((song) => ({
+        id: song.id,
+        title: song.attributes.name,
+        artist: song.attributes.artistName,
+        bpm: null,
+        image: song.attributes.artwork?.url
+          ?.replace("{w}", "64")
+          ?.replace("{h}", "64"),
+      }));
+      allTracks = [...allTracks, ...tracks];
+      offset += limit;
+
+      if (result.data.data.length < limit) break;
+    } else {
+      break;
+    }
   }
-  return [];
+
+  return allTracks;
 }
 
 export async function playAppleMusicTrack(songId) {
