@@ -81,3 +81,31 @@ export function pauseAppleMusic() {
   const music = MusicKit.getInstance();
   music.pause();
 }
+
+export async function createAppleMusicPlaylist(name, trackIds) {
+  const music = MusicKit.getInstance();
+  const response = await music.api.music(
+    "/v1/me/library/playlists",
+    {},
+    {
+      fetchOptions: {
+        method: "POST",
+        body: JSON.stringify({
+          attributes: {
+            name: name,
+            description: "Created by TEMPO",
+          },
+          relationships: {
+            tracks: {
+              data: trackIds.map((id) => ({
+                id: id,
+                type: "songs",
+              })),
+            },
+          },
+        }),
+      },
+    },
+  );
+  return response;
+}

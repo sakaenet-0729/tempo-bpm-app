@@ -20,6 +20,7 @@ import {
   getAppleMusicLibrary,
   playAppleMusicTrack,
   pauseAppleMusic,
+  createAppleMusicPlaylist,
 } from "./applemusic";
 
 function App() {
@@ -279,27 +280,40 @@ function App() {
   };
 
   const handleCreatePlaylist = async () => {
-    if (selectedTracks.length === 0 || !token) return;
+    if (selectedTracks.length === 0) return;
     setIsCreatingPlaylist(true);
 
-    const playlist = await createPlaylist(
-      token,
-      playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
-    );
-
-    if (playlist.id) {
-      const trackUris = [];
-      for (const track of selectedTracks) {
-        const results = await searchTracks(
-          `${track.title} ${track.artist}`,
-          token,
+    if (musicService === "apple") {
+      try {
+        const trackIds = selectedTracks.map((t) => t.id);
+        await createAppleMusicPlaylist(
+          playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
+          trackIds,
         );
-        if (results.length > 0) {
-          trackUris.push(`spotify:track:${results[0].id}`);
-        }
+      } catch (err) {
+        console.error("Apple Music playlist error:", err);
       }
-      if (trackUris.length > 0) {
-        await addTracksToPlaylist(token, playlist.id, trackUris);
+    } else {
+      if (!token) return;
+      const playlist = await createPlaylist(
+        token,
+        playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
+      );
+
+      if (playlist.id) {
+        const trackUris = [];
+        for (const track of selectedTracks) {
+          const results = await searchTracks(
+            `${track.title} ${track.artist}`,
+            token,
+          );
+          if (results.length > 0) {
+            trackUris.push(`spotify:track:${results[0].id}`);
+          }
+        }
+        if (trackUris.length > 0) {
+          await addTracksToPlaylist(token, playlist.id, trackUris);
+        }
       }
     }
 
