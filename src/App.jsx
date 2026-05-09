@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import BpmFilter from "./BpmFilter";
 import {
@@ -24,6 +24,8 @@ import {
 } from "./applemusic";
 
 function App() {
+  const loadMoreRef = useRef(null);
+
   const [minBpm, setMinBpm] = useState(60);
   const [maxBpm, setMaxBpm] = useState(200);
   const [token, setToken] = useState(null);
@@ -242,6 +244,32 @@ function App() {
     }
     fetchLibrary();
   }, [token, musicService]);
+
+  // ===== 無限スクロール =====
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore) {
+          if (
+            mode === "library" &&
+            displayCount < filteredLibraryTracks.length
+          ) {
+            setIsLoadingMore(true);
+            setTimeout(() => {
+              setDisplayCount((prev) => prev + 50);
+              setIsLoadingMore(false);
+            }, 800);
+          }
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [displayCount, filteredLibraryTracks.length, isLoadingMore, mode]);
 
   // ===== ハンドラー =====
   const handleLogout = () => {
@@ -922,29 +950,14 @@ function App() {
           {renderFloatingControls()}
 
           {mode === "library" &&
-            displayCount < filteredLibraryTracks.length &&
-            !isLoadingMore && (
-              <button
-                onClick={() => {
-                  setIsLoadingMore(true);
-                  setTimeout(() => {
-                    setDisplayCount((prev) => prev + 50);
-                    setIsLoadingMore(false);
-                  }, 800);
-                }}
-                className="genre-btn active"
-                style={{ display: "block", margin: "16px auto" }}
+            displayCount < filteredLibraryTracks.length && (
+              <div
+                ref={loadMoreRef}
+                style={{ textAlign: "center", margin: "16px 0" }}
               >
-                もっと見る（残り
-                {filteredLibraryTracks.length - displayCount}曲）
-              </button>
+                <div className="loading-spinner" />
+              </div>
             )}
-
-          {isLoadingMore && (
-            <div style={{ textAlign: "center", margin: "16px 0" }}>
-              <div className="loading-spinner" />
-            </div>
-          )}
         </>
       )}
 
