@@ -53,18 +53,34 @@ function App() {
 
   // ===== トークン取得 =====
   useEffect(() => {
-    async function fetchToken() {
-      const accessToken = await getAccessToken();
-      if (accessToken) {
-        setToken(accessToken);
+    async function init() {
+      const savedService = localStorage.getItem("music_service");
+
+      if (savedService === "apple") {
+        setMusicService("apple");
+        try {
+          const music = await loginWithAppleMusic();
+          setAppleMusicInstance(music);
+          setToken("apple-music-authorized");
+        } catch (err) {
+          console.error("Apple Music auto-login failed:", err);
+        }
+        return;
+      }
+
+      const saved = localStorage.getItem("spotify_token");
+      if (saved) {
+        setMusicService("spotify");
+        setToken(saved);
+      } else {
+        const accessToken = await getAccessToken();
+        if (accessToken) {
+          setMusicService("spotify");
+          setToken(accessToken);
+        }
       }
     }
-    const saved = localStorage.getItem("spotify_token");
-    if (saved) {
-      setToken(saved);
-    } else {
-      fetchToken();
-    }
+    init();
   }, []);
 
   // ===== ライブラリ取得 =====
@@ -74,20 +90,50 @@ function App() {
 
       // Apple Musicの場合
       if (musicService === "apple") {
+        const cached = localStorage.getItem("apple_library_cache");
+        if (cached) {
+          const cachedData = JSON.parse(cached);
+          setLibraryTracks(cachedData);
+          setIsLibraryLoading(false);
+
+          const needsBpm = cachedData.filter((t) => t.bpm === null);
+          for (const track of needsBpm) {
+            await new Promise((r) => setTimeout(r, 1000));
+            const bpm = await getTrackBpm(track.title, track.artist);
+            setLibraryTracks((prev) => {
+              const updated = prev.map((s) =>
+                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+              );
+              localStorage.setItem(
+                "apple_library_cache",
+                JSON.stringify(updated),
+              );
+              return updated;
+            });
+          }
+          return;
+        }
+
         setIsLibraryLoading(true);
         try {
           const tracks = await getAppleMusicLibrary();
           setLibraryTracks(tracks);
+          localStorage.setItem("apple_library_cache", JSON.stringify(tracks));
           setIsLibraryLoading(false);
 
           for (const track of tracks) {
             await new Promise((r) => setTimeout(r, 1000));
             const bpm = await getTrackBpm(track.title, track.artist);
-            setLibraryTracks((prev) =>
-              prev.map((s) =>
+            setLibraryTracks((prev) => {
+              const updated = prev.map((s) =>
                 s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-              ),
-            );
+              );
+              localStorage.setItem(
+                "apple_library_cache",
+                JSON.stringify(updated),
+              );
+              return updated;
+            });
           }
         } catch (err) {
           console.error("Apple Music library error:", err);
@@ -198,6 +244,8 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
     localStorage.removeItem("library_cache");
+    localStorage.removeItem("apple_library_cache");
+    localStorage.removeItem("music_service");
     setToken(null);
     setSearchResults([]);
     setLibraryTracks([]);
@@ -663,12 +711,13 @@ function App() {
               <button
                 className="genre-btn active"
                 onClick={() => {
+                  localStorage.setItem("music_service", "spotify");
                   setMusicService("spotify");
                   loginWithSpotify();
                 }}
               >
                 Spotify
-              </button>
+              </button>{" "}
               <button
                 className="genre-btn active"
                 onClick={async () => {
@@ -677,6 +726,7 @@ function App() {
                     setAppleMusicInstance(music);
                     setMusicService("apple");
                     setToken("apple-music-authorized");
+                    localStorage.setItem("music_service", "apple");
                   } catch (err) {
                     console.error("Apple Music login failed:", err);
                   }
@@ -684,7 +734,7 @@ function App() {
                 style={{ background: "#fc3c44" }}
               >
                 Apple Music
-              </button>
+              </button>{" "}
             </div>
           </div>
         ) : (
