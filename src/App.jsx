@@ -323,7 +323,7 @@ function App() {
     setSimilarMode("library");
     setPlayingTrackId(null);
 
-    const bpmRange = 10;
+    const bpmRange = 5;
     const matches = libraryTracks.filter(
       (t) =>
         t.id !== song.id &&
