@@ -381,6 +381,7 @@ function App() {
         token,
         playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
       );
+      console.log("作成されたプレイリスト:", playlist);
 
       if (playlist.id) {
         const trackUris = [];
@@ -389,12 +390,19 @@ function App() {
             `${track.title} ${track.artist}`,
             token,
           );
+          console.log("検索結果:", track.title, results.length);
           if (results.length > 0) {
             trackUris.push(`spotify:track:${results[0].id}`);
           }
         }
+        console.log("追加するトラック:", trackUris);
         if (trackUris.length > 0) {
-          await addTracksToPlaylist(token, playlist.id, trackUris);
+          const addResult = await addTracksToPlaylist(
+            token,
+            playlist.id,
+            trackUris,
+          );
+          console.log("追加結果:", addResult);
         }
       }
     }
