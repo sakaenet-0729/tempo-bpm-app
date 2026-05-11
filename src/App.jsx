@@ -94,31 +94,63 @@ function App() {
 
   // ===== ライブラリ取得 =====
   useEffect(() => {
+    let cancelled = false; // コンポーネントがアンマウントされたら処理を止める
+
+    // BPMを安全に更新するヘルパー（APIが落ちていても表示が壊れない）
+    async function fetchBpmSafely(track) {
+      try {
+        const bpm = await getTrackBpm(track.title, track.artist);
+        return { id: track.id, bpm: bpm ?? 0 };
+      } catch {
+        return { id: track.id, bpm: 0 };
+      }
+    }
+
+    // 3曲ずつ並列でBPM取得（APIレート制限に配慮しつつ高速化）
+    async function fetchBpmInBatches(tracks, cacheKey) {
+      const BATCH_SIZE = 3;
+      const BATCH_DELAY = 1200; // バッチ間の待機(ms)
+
+      for (let i = 0; i < tracks.length; i += BATCH_SIZE) {
+        if (cancelled) return;
+
+        const batch = tracks.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(batch.map(fetchBpmSafely));
+
+        if (cancelled) return;
+
+        setLibraryTracks((prev) => {
+          const bpmMap = new Map(results.map((r) => [r.id, r.bpm]));
+          const updated = prev.map((s) =>
+            bpmMap.has(s.id) ? { ...s, bpm: bpmMap.get(s.id) } : s,
+          );
+          if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(updated));
+          return updated;
+        });
+
+        if (i + BATCH_SIZE < tracks.length) {
+          await new Promise((r) => setTimeout(r, BATCH_DELAY));
+        }
+      }
+    }
+
     async function fetchLibrary() {
       if (!token) return;
 
-      // Apple Musicの場合
+      // ===== Apple Musicの場合 =====
       if (musicService === "apple") {
         const cached = localStorage.getItem("apple_library_cache");
         if (cached) {
-          const cachedData = JSON.parse(cached);
-          setLibraryTracks(cachedData);
-          setIsLibraryLoading(false);
-
-          const needsBpm = cachedData.filter((t) => t.bpm === null);
-          for (const track of needsBpm) {
-            await new Promise((r) => setTimeout(r, 1000));
-            const bpm = await getTrackBpm(track.title, track.artist);
-            setLibraryTracks((prev) => {
-              const updated = prev.map((s) =>
-                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-              );
-              localStorage.setItem(
-                "apple_library_cache",
-                JSON.stringify(updated),
-              );
-              return updated;
-            });
+          try {
+            const cachedData = JSON.parse(cached);
+            if (!cancelled) {
+              setLibraryTracks(cachedData);
+              setIsLibraryLoading(false);
+            }
+            const needsBpm = cachedData.filter((t) => t.bpm === null);
+            await fetchBpmInBatches(needsBpm, "apple_library_cache");
+          } catch {
+            localStorage.removeItem("apple_library_cache");
           }
           return;
         }
@@ -126,88 +158,65 @@ function App() {
         setIsLibraryLoading(true);
         try {
           const tracks = await getAppleMusicLibrary();
+          if (cancelled) return;
+
+          // 曲リストをまず表示してからBPM取得（リストが消えない）
           setLibraryTracks(tracks);
           localStorage.setItem("apple_library_cache", JSON.stringify(tracks));
           setIsLibraryLoading(false);
 
-          for (const track of tracks) {
-            await new Promise((r) => setTimeout(r, 1000));
-            const bpm = await getTrackBpm(track.title, track.artist);
-            setLibraryTracks((prev) => {
-              const updated = prev.map((s) =>
-                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-              );
-              localStorage.setItem(
-                "apple_library_cache",
-                JSON.stringify(updated),
-              );
-              return updated;
-            });
-          }
+          await fetchBpmInBatches(tracks, "apple_library_cache");
         } catch (err) {
           console.error("Apple Music library error:", err);
-          setIsLibraryLoading(false);
+          if (!cancelled) setIsLibraryLoading(false);
         }
         return;
       }
 
-      // Spotifyの場合
-      // Spotifyの場合
+      // ===== Spotifyの場合 =====
       const cached = localStorage.getItem("library_cache");
-
       if (cached) {
-        const cachedData = JSON.parse(cached);
-        setLibraryTracks(cachedData);
-        setIsLibraryLoading(false);
-
-        const needsBpm = cachedData.filter((t) => t.bpm === null);
-        for (const track of needsBpm) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const bpm = await getTrackBpm(track.title, track.artist);
-          setLibraryTracks((prev) => {
-            const updated = prev.map((s) =>
-              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-            );
-            localStorage.setItem("library_cache", JSON.stringify(updated));
-            return updated;
-          });
+        try {
+          const cachedData = JSON.parse(cached);
+          if (!cancelled) {
+            setLibraryTracks(cachedData);
+            setIsLibraryLoading(false);
+          }
+          const needsBpm = cachedData.filter((t) => t.bpm === null);
+          await fetchBpmInBatches(needsBpm, "library_cache");
+        } catch {
+          localStorage.removeItem("library_cache");
         }
         return;
       }
 
       setIsLibraryLoading(true);
 
-      // まずよく聞く曲を取得（最優先で表示）
+      // Step1: よく聞く曲を最優先で表示
       const topData = await getMyTopTracks(token, 0);
-      const topTracks = topData.items
-        .filter((item) => item)
-        .map((track) => ({
-          id: track.id,
-          title: track.name,
-          artist: track.artists[0].name,
-          bpm: null,
-          image: track.album.images[2]?.url,
-        }));
+      if (cancelled) return;
+
+      const topTracks = (topData.items || []).filter(Boolean).map((track) => ({
+        id: track.id,
+        title: track.name,
+        artist: track.artists[0].name,
+        bpm: null,
+        image: track.album.images[2]?.url,
+      }));
 
       setLibraryTracks(topTracks);
       setIsLibraryLoading(false);
 
-      // よく聞く曲のBPMを先に取得
-      for (const track of topTracks) {
-        await new Promise((r) => setTimeout(r, 1000));
-        const bpm = await getTrackBpm(track.title, track.artist);
-        setLibraryTracks((prev) => {
-          const updated = prev.map((s) =>
-            s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-          );
-          return updated;
-        });
-      }
+      // Step2: よく聞く曲のBPMを先に取得（3曲並列）
+      await fetchBpmInBatches(topTracks, null);
+      if (cancelled) return;
 
-      // いいねした曲を追加
+      // Step3: いいねした曲を追加
       const likedData = await getMyTracks(token);
-      const likedTracks = likedData.items
-        .filter((item) => item.track)
+      if (cancelled) return;
+
+      const likedTracks = (likedData.items || [])
+        .filter((item) => item?.track)
         .map((item) => ({
           id: item.track.id,
           title: item.track.name,
@@ -222,68 +231,65 @@ function App() {
         return [...prev, ...newTracks];
       });
 
-      // プレイリストの曲を追加
+      // Step4: プレイリストの曲を追加
       const playlists = await getMyPlaylists(token);
+      if (cancelled) return;
 
       for (const pl of playlists) {
-        await new Promise((r) => setTimeout(r, 2000));
+        if (cancelled) return;
+        await new Promise((r) => setTimeout(r, 1000));
         const items = await getPlaylistTracks(pl.id, token);
-        const tracks = items
-          .filter((item) => item.track || item.item)
+        const tracks = (items || [])
+          .filter((item) => item?.track || item?.item)
           .map((item) => {
             const t = item.track || item.item;
             return {
               id: t.id,
               title: t.name,
-              artist: t.artists[0].name,
+              artist: t.artists[0]?.name || "Unknown",
               bpm: null,
-              image: t.album.images[2]?.url,
+              image: t.album?.images[2]?.url,
             };
           });
 
-        setLibraryTracks((prev) => {
-          const existingIds = new Set(prev.map((t) => t.id));
-          const newTracks = tracks.filter((t) => !existingIds.has(t.id));
-          return [...prev, ...newTracks];
-        });
+        if (!cancelled) {
+          setLibraryTracks((prev) => {
+            const existingIds = new Set(prev.map((t) => t.id));
+            const newTracks = tracks.filter((t) => !existingIds.has(t.id));
+            return [...prev, ...newTracks];
+          });
+        }
       }
 
-      // 全曲の重複除去＋キャッシュ保存＋残りのBPM取得
+      if (cancelled) return;
+
+      // Step5: 全曲まとめてキャッシュ保存 → 残りのBPM取得
       setLibraryTracks((current) => {
         const unique = current.filter(
           (track, index, self) =>
             self.findIndex((t) => t.id === track.id) === index,
         );
-        localStorage.setItem("library_cache", JSON.stringify(unique));
-
         if (unique.length === 0) {
           setLibraryError(
             "データ取得の制限中です。数分後にもう一度お試しください",
           );
         }
-
-        // BPM未取得の曲だけBPM取得
-        (async () => {
-          const needsBpm = unique.filter((t) => t.bpm === null);
-          for (const track of needsBpm) {
-            await new Promise((r) => setTimeout(r, 1000));
-            const bpm = await getTrackBpm(track.title, track.artist);
-            setLibraryTracks((prev) => {
-              const updated = prev.map((s) =>
-                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-              );
-              localStorage.setItem("library_cache", JSON.stringify(updated));
-              return updated;
-            });
-          }
-        })();
-
+        localStorage.setItem("library_cache", JSON.stringify(unique));
         return unique;
       });
 
-      setIsLibraryLoading(false);
+      // Step6: 残りのBPM取得（liked + playlist分）
+      setLibraryTracks((current) => {
+        const needsBpm = current.filter((t) => t.bpm === null);
+        fetchBpmInBatches(needsBpm, "library_cache");
+        return current;
+      });
     }
+
     fetchLibrary();
+    return () => {
+      cancelled = true;
+    };
   }, [token, musicService]);
 
   // ===== 無限スクロール =====

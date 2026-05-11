@@ -151,44 +151,57 @@ export async function getPlaylistTracks(playlistId, token) {
   }
 }
 
+// タイムアウト付きfetch（APIサーバーが落ちていても固まらない）
+async function fetchWithTimeout(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function getTrackBpm(trackName, artistName) {
   const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
+  if (!API_KEY) return null;
 
   try {
-    let response = await fetch(
+    const response = await fetchWithTimeout(
       `https://api.getsong.co/search/?api_key=${API_KEY}&type=both&lookup=song:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}`,
     );
 
-    if (response.ok) {
-      let data = await response.json();
-      if (data.search && Array.isArray(data.search) && data.search.length > 0) {
-        const tempos = data.search
-          .map((s) => Number(s.tempo))
-          .filter((t) => t > 0 && t < 300);
-        if (tempos.length > 0) {
-          return tempos[0];
-        }
-      }
+    // 401/403/503などAPIエラーは即座にnullを返す（リトライしない）
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (data.search && Array.isArray(data.search) && data.search.length > 0) {
+      const tempos = data.search
+        .map((s) => Number(s.tempo))
+        .filter((t) => t > 0 && t < 300);
+      if (tempos.length > 0) return tempos[0];
     }
 
     // フォールバック：曲名だけで再検索
-    response = await fetch(
+    const response2 = await fetchWithTimeout(
       `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=${encodeURIComponent(trackName)}`,
     );
+    if (!response2.ok) return null;
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data.search && Array.isArray(data.search) && data.search.length > 0) {
-        const tempos = data.search
-          .map((s) => Number(s.tempo))
-          .filter((t) => t > 0 && t < 300);
-        if (tempos.length > 0) {
-          return tempos[0];
-        }
-      }
+    const data2 = await response2.json();
+    if (
+      data2.search &&
+      Array.isArray(data2.search) &&
+      data2.search.length > 0
+    ) {
+      const tempos = data2.search
+        .map((s) => Number(s.tempo))
+        .filter((t) => t > 0 && t < 300);
+      if (tempos.length > 0) return tempos[0];
     }
   } catch {
-    // API制限やネットワークエラー
+    // タイムアウト・ネットワークエラーは静かにnullを返す
   }
 
   return null;
