@@ -146,7 +146,6 @@ function App() {
           }
         } catch (err) {
           console.error("Apple Music library error:", err);
-          setLibraryError("Apple Musicのライブラリ取得に失敗しました");
           setIsLibraryLoading(false);
         }
         return;
@@ -313,11 +312,9 @@ function App() {
   // ===== ハンドラー =====
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
-    localStorage.removeItem("code_verifier");
-    localStorage.removeItem("music_service");
     localStorage.removeItem("library_cache");
     localStorage.removeItem("apple_library_cache");
-    location.reload();
+    localStorage.removeItem("music_service");
     setToken(null);
     setSearchResults([]);
     setLibraryTracks([]);
@@ -820,7 +817,6 @@ function App() {
                     localStorage.setItem("music_service", "apple");
                   } catch (err) {
                     console.error("Apple Music login failed:", err);
-                    setLibraryError("Apple Musicログインに失敗しました");
                   }
                 }}
                 style={{ background: "#fc3c44" }}
