@@ -313,9 +313,11 @@ function App() {
   // ===== ハンドラー =====
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
+    localStorage.removeItem("code_verifier");
+    localStorage.removeItem("music_service");
     localStorage.removeItem("library_cache");
     localStorage.removeItem("apple_library_cache");
-    localStorage.removeItem("music_service");
+    location.reload();
     setToken(null);
     setSearchResults([]);
     setLibraryTracks([]);
