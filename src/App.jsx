@@ -146,6 +146,7 @@ function App() {
           }
         } catch (err) {
           console.error("Apple Music library error:", err);
+          setLibraryError("Apple Musicのライブラリ取得に失敗しました");
           setIsLibraryLoading(false);
         }
         return;
@@ -817,6 +818,7 @@ function App() {
                     localStorage.setItem("music_service", "apple");
                   } catch (err) {
                     console.error("Apple Music login failed:", err);
+                    setLibraryError("Apple Musicログインに失敗しました");
                   }
                 }}
                 style={{ background: "#fc3c44" }}
