@@ -231,10 +231,11 @@ function App() {
         return [...prev, ...newTracks];
       });
 
-      // Step4: プレイリストの曲を追加
+      // Step4: プレイリストの曲を追加（全プレイリスト取得後に一括マージ）
       const playlists = await getMyPlaylists(token);
       if (cancelled) return;
 
+      const allPlaylistTracks = [];
       for (const pl of playlists) {
         if (cancelled) return;
         await new Promise((r) => setTimeout(r, 1000));
@@ -251,14 +252,21 @@ function App() {
               image: t.album?.images[2]?.url,
             };
           });
+        allPlaylistTracks.push(...tracks);
+      }
 
-        if (!cancelled) {
-          setLibraryTracks((prev) => {
-            const existingIds = new Set(prev.map((t) => t.id));
-            const newTracks = tracks.filter((t) => !existingIds.has(t.id));
-            return [...prev, ...newTracks];
+      // 全プレイリスト分をまとめて重複除去してからマージ
+      if (!cancelled) {
+        setLibraryTracks((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const seen = new Set(existingIds);
+          const newTracks = allPlaylistTracks.filter((t) => {
+            if (seen.has(t.id)) return false;
+            seen.add(t.id);
+            return true;
           });
-        }
+          return [...prev, ...newTracks];
+        });
       }
 
       if (cancelled) return;
