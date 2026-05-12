@@ -55,6 +55,7 @@ function App() {
   const [musicService, setMusicService] = useState("spotify");
   const [appleMusicInstance, setAppleMusicInstance] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [bpmProgress, setBpmProgress] = useState({ loaded: 0, total: 0 });
   const SCOPES =
     "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
 
@@ -109,7 +110,10 @@ function App() {
     // 3曲ずつ並列でBPM取得（APIレート制限に配慮しつつ高速化）
     async function fetchBpmInBatches(tracks, cacheKey) {
       const BATCH_SIZE = 3;
-      const BATCH_DELAY = 1200; // バッチ間の待機(ms)
+      const BATCH_DELAY = 1200;
+
+      // 進捗の初期値をセット
+      setBpmProgress({ loaded: 0, total: tracks.length });
 
       for (let i = 0; i < tracks.length; i += BATCH_SIZE) {
         if (cancelled) return;
@@ -118,6 +122,11 @@ function App() {
         const results = await Promise.all(batch.map(fetchBpmSafely));
 
         if (cancelled) return;
+
+        setBpmProgress((prev) => ({
+          ...prev,
+          loaded: Math.min(prev.loaded + results.length, prev.total),
+        }));
 
         setLibraryTracks((prev) => {
           const bpmMap = new Map(results.map((r) => [r.id, r.bpm]));
@@ -132,6 +141,9 @@ function App() {
           await new Promise((r) => setTimeout(r, BATCH_DELAY));
         }
       }
+
+      // 完了したらリセット
+      setBpmProgress({ loaded: 0, total: 0 });
     }
 
     async function fetchLibrary() {
@@ -157,15 +169,28 @@ function App() {
 
         setIsLibraryLoading(true);
         try {
-          const tracks = await getAppleMusicLibrary();
+          const [tracks, recentTracks] = await Promise.all([
+            getAppleMusicLibrary(),
+            getAppleMusicRecentlyPlayed(),
+          ]);
           if (cancelled) return;
 
-          // 曲リストをまず表示してからBPM取得（リストが消えない）
-          setLibraryTracks(tracks);
-          localStorage.setItem("apple_library_cache", JSON.stringify(tracks));
+          // RecentlyPlayedのidを順番通りに保持
+          const recentIds = recentTracks.map((t) => t.id);
+          const recentSet = new Set(recentIds);
+
+          // RecentlyPlayedを先頭に、残りを後ろに並べる
+          const recentFirst = tracks
+            .filter((t) => recentSet.has(t.id))
+            .sort((a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id));
+          const rest = tracks.filter((t) => !recentSet.has(t.id));
+          const sorted = [...recentFirst, ...rest];
+
+          setLibraryTracks(sorted);
+          localStorage.setItem("apple_library_cache", JSON.stringify(sorted));
           setIsLibraryLoading(false);
 
-          await fetchBpmInBatches(tracks, "apple_library_cache");
+          await fetchBpmInBatches(sorted, "apple_library_cache");
         } catch (err) {
           console.error("Apple Music library error:", err);
           if (!cancelled) setIsLibraryLoading(false);
@@ -175,17 +200,33 @@ function App() {
 
       // ===== Spotifyの場合 =====
       const cached = localStorage.getItem("library_cache");
+      const cachedTopIds = localStorage.getItem("spotify_top_ids");
+
       if (cached) {
         try {
           const cachedData = JSON.parse(cached);
+          let sorted = cachedData;
+
+          // top曲の順番が保存されていれば先頭に並び替え
+          if (cachedTopIds) {
+            const topIds = JSON.parse(cachedTopIds);
+            const topSet = new Set(topIds);
+            const topFirst = cachedData
+              .filter((t) => topSet.has(t.id))
+              .sort((a, b) => topIds.indexOf(a.id) - topIds.indexOf(b.id));
+            const rest = cachedData.filter((t) => !topSet.has(t.id));
+            sorted = [...topFirst, ...rest];
+          }
+
           if (!cancelled) {
-            setLibraryTracks(cachedData);
+            setLibraryTracks(sorted);
             setIsLibraryLoading(false);
           }
-          const needsBpm = cachedData.filter((t) => t.bpm === null);
+          const needsBpm = sorted.filter((t) => t.bpm === null);
           await fetchBpmInBatches(needsBpm, "library_cache");
         } catch {
           localStorage.removeItem("library_cache");
+          localStorage.removeItem("spotify_top_ids");
         }
         return;
       }
@@ -203,6 +244,12 @@ function App() {
         bpm: null,
         image: track.album.images[2]?.url,
       }));
+
+      // top曲のID順を保存（次回キャッシュ読み込み時の並び替え用）
+      localStorage.setItem(
+        "spotify_top_ids",
+        JSON.stringify(topTracks.map((t) => t.id)),
+      );
 
       setLibraryTracks(topTracks);
       setIsLibraryLoading(false);
@@ -279,7 +326,8 @@ function App() {
 
       if (cancelled) return;
 
-      // Step5: 全曲まとめてキャッシュ保存 → 残りのBPM取得
+      // Step5: 全曲まとめてキャッシュ保存
+      let finalTracks = [];
       setLibraryTracks((current) => {
         const seen = new Set();
         const unique = current.filter((track) => {
@@ -294,15 +342,16 @@ function App() {
           );
         }
         localStorage.setItem("library_cache", JSON.stringify(unique));
+        finalTracks = unique;
         return unique;
       });
 
-      // Step6: 残りのBPM取得（liked + playlist分）
-      setLibraryTracks((current) => {
-        const needsBpm = current.filter((t) => t.bpm === null);
-        fetchBpmInBatches(needsBpm, "library_cache");
-        return current;
-      });
+      // Step6: 残りのBPM取得（setLibraryTracksコールバック外で呼ぶ）
+      await new Promise((r) => setTimeout(r, 100)); // Step5のstate更新を待つ
+      if (!cancelled) {
+        const needsBpm = finalTracks.filter((t) => t.bpm === null);
+        await fetchBpmInBatches(needsBpm, "library_cache");
+      }
     }
 
     fetchLibrary();
@@ -978,6 +1027,11 @@ function App() {
               ? filteredResults.length
               : filteredLibraryTracks.length}{" "}
             TRACKS
+            {bpmProgress.total > 0 && (
+              <span style={{ marginLeft: "8px", color: "#00d672" }}>
+                (BPM取得中 {bpmProgress.loaded}/{bpmProgress.total})
+              </span>
+            )}
           </p>
           <ul className="song-list">
             {displayedTracks.map((song) => (
