@@ -330,6 +330,8 @@ export async function renamePlaylist(token, playlistId, name) {
 
 // プレイリストから曲を削除
 export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
+  const body = { tracks: trackUris.map((uri) => ({ uri })) };
+  console.log("DELETE body:", JSON.stringify(body));
   const response = await fetch(
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
     {
@@ -338,11 +340,13 @@ export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        tracks: trackUris.map((uri) => ({ uri })),
-      }),
+      body: JSON.stringify(body),
     },
   );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    console.error("削除APIエラー:", response.status, err);
+  }
   return response.ok;
 }
 

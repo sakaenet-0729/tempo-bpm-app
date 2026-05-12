@@ -710,7 +710,8 @@ function App() {
       setIsPlaylistsLoading(true);
       if (musicService === "spotify") {
         const data = await getMyPlaylists(token);
-        setPlaylists(data);
+        // TEMPOで作成したプレイリストのみ表示
+        setPlaylists(data.filter((pl) => pl.name?.startsWith("TEMPO")));
       } else {
         // Apple Music: ライブラリのプレイリスト取得
         try {
@@ -719,14 +720,16 @@ function App() {
             "/v1/me/library/playlists?limit=100",
           );
           setPlaylists(
-            (result.data.data || []).map((pl) => ({
-              id: pl.id,
-              name: pl.attributes.name,
-              trackCount: pl.attributes.trackCount,
-              image: pl.attributes.artwork?.url
-                ?.replace("{w}", "64")
-                ?.replace("{h}", "64"),
-            })),
+            (result.data.data || [])
+              .filter((pl) => pl.attributes.name?.startsWith("TEMPO"))
+              .map((pl) => ({
+                id: pl.id,
+                name: pl.attributes.name,
+                trackCount: pl.attributes.trackCount,
+                image: pl.attributes.artwork?.url
+                  ?.replace("{w}", "64")
+                  ?.replace("{h}", "64"),
+              })),
           );
         } catch {
           setPlaylists([]);
@@ -782,7 +785,19 @@ function App() {
   // ===== Play画面: 曲削除 =====
   const handleRemoveTrack = async (trackUri, index) => {
     if (musicService === "spotify") {
-      await removeTracksFromPlaylist(token, selectedPlaylist.id, [trackUri]);
+      console.log("削除リクエスト:", {
+        playlistId: selectedPlaylist.id,
+        trackUri,
+        token: token?.slice(0, 10),
+      });
+      const ok = await removeTracksFromPlaylist(token, selectedPlaylist.id, [
+        trackUri,
+      ]);
+      console.log("削除結果:", ok);
+      if (!ok) {
+        alert("削除に失敗しました。ログアウト→再ログインをお試しください。");
+        return;
+      }
     } else {
       // Apple Musicはライブラリプレイリストの曲削除
       try {
