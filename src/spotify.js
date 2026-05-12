@@ -151,44 +151,57 @@ export async function getPlaylistTracks(playlistId, token) {
   }
 }
 
+// タイムアウト付きfetch（APIサーバーが落ちていても固まらない）
+async function fetchWithTimeout(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function getTrackBpm(trackName, artistName) {
   const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
+  if (!API_KEY) return null;
 
   try {
-    let response = await fetch(
+    const response = await fetchWithTimeout(
       `https://api.getsong.co/search/?api_key=${API_KEY}&type=both&lookup=song:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}`,
     );
 
-    if (response.ok) {
-      let data = await response.json();
-      if (data.search && Array.isArray(data.search) && data.search.length > 0) {
-        const tempos = data.search
-          .map((s) => Number(s.tempo))
-          .filter((t) => t > 0 && t < 300);
-        if (tempos.length > 0) {
-          return tempos[0];
-        }
-      }
+    // 401/403/503などAPIエラーは即座にnullを返す（リトライしない）
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (data.search && Array.isArray(data.search) && data.search.length > 0) {
+      const tempos = data.search
+        .map((s) => Number(s.tempo))
+        .filter((t) => t > 0 && t < 300);
+      if (tempos.length > 0) return tempos[0];
     }
 
     // フォールバック：曲名だけで再検索
-    response = await fetch(
+    const response2 = await fetchWithTimeout(
       `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=${encodeURIComponent(trackName)}`,
     );
+    if (!response2.ok) return null;
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data.search && Array.isArray(data.search) && data.search.length > 0) {
-        const tempos = data.search
-          .map((s) => Number(s.tempo))
-          .filter((t) => t > 0 && t < 300);
-        if (tempos.length > 0) {
-          return tempos[0];
-        }
-      }
+    const data2 = await response2.json();
+    if (
+      data2.search &&
+      Array.isArray(data2.search) &&
+      data2.search.length > 0
+    ) {
+      const tempos = data2.search
+        .map((s) => Number(s.tempo))
+        .filter((t) => t > 0 && t < 300);
+      if (tempos.length > 0) return tempos[0];
     }
   } catch {
-    // API制限やネットワークエラー
+    // タイムアウト・ネットワークエラーは静かにnullを返す
   }
 
   return null;
@@ -278,4 +291,101 @@ export async function addTracksToPlaylist(token, playlistId, trackUris) {
     },
   );
   return response.json();
+}
+// プレイリストの曲一覧取得（ページネーション対応）
+export async function getPlaylistTracksAll(playlistId, token) {
+  try {
+    let allItems = [];
+    let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+    while (url) {
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) break;
+      const data = await response.json();
+      allItems = [...allItems, ...(data.items || [])];
+      url = data.next || null;
+    }
+    return allItems;
+  } catch {
+    return [];
+  }
+}
+
+// プレイリスト名・説明を変更
+export async function renamePlaylist(token, playlistId, name) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    },
+  );
+  return response.ok;
+}
+
+// プレイリストから曲を削除
+export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        tracks: trackUris.map((uri) => ({ uri })),
+      }),
+    },
+  );
+  return response.ok;
+}
+
+// プレイリストの曲順を変更（1曲を別の位置に移動）
+export async function reorderPlaylistTracks(
+  token,
+  playlistId,
+  rangeStart,
+  insertBefore,
+) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        range_start: rangeStart,
+        insert_before: insertBefore,
+        range_length: 1,
+      }),
+    },
+  );
+  return response.ok;
+}
+
+export async function getMyTopTracks(token, offset = 0) {
+  try {
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=short_term`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (response.status === 401) {
+      localStorage.removeItem("spotify_token");
+      window.location.reload();
+      return { items: [] };
+    }
+    if (!response.ok) return { items: [] };
+    const data = await response.json();
+    return data;
+  } catch {
+    return { items: [] };
+  }
 }

@@ -9,10 +9,14 @@ import {
   getMyTracks,
   getMyPlaylists,
   getPlaylistTracks,
+  getPlaylistTracksAll,
   searchByBpm,
   createPlaylist,
   addTracksToPlaylist,
   getMyTopTracks,
+  renamePlaylist,
+  removeTracksFromPlaylist,
+  reorderPlaylistTracks,
 } from "./spotify";
 
 import {
@@ -56,6 +60,18 @@ function App() {
   const [appleMusicInstance, setAppleMusicInstance] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [bpmProgress, setBpmProgress] = useState({ loaded: 0, total: 0 });
+
+  // ===== Play画面用state =====
+  const [navTab, setNavTab] = useState("tracks"); // "tracks" | "play"
+  const [playlists, setPlaylists] = useState([]);
+  const [isPlaylistsLoading, setIsPlaylistsLoading] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState(null); // 詳細表示中のプレイリスト
+  const [playlistTracks, setPlaylistTracks] = useState([]); // 詳細の曲一覧
+  const [isPlaylistTracksLoading, setIsPlaylistTracksLoading] = useState(false);
+  const [editingPlaylistName, setEditingPlaylistName] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [dragIndex, setDragIndex] = useState(null); // ドラッグ中のインデックス
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const SCOPES =
     "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
 
@@ -687,6 +703,223 @@ function App() {
     );
   };
 
+  // ===== Play画面: プレイリスト一覧取得 =====
+  useEffect(() => {
+    if (navTab !== "play" || !token) return;
+    async function loadPlaylists() {
+      setIsPlaylistsLoading(true);
+      if (musicService === "spotify") {
+        const data = await getMyPlaylists(token);
+        setPlaylists(data);
+      } else {
+        // Apple Music: ライブラリのプレイリスト取得
+        try {
+          const music = MusicKit.getInstance();
+          const result = await music.api.music(
+            "/v1/me/library/playlists?limit=100",
+          );
+          setPlaylists(
+            (result.data.data || []).map((pl) => ({
+              id: pl.id,
+              name: pl.attributes.name,
+              trackCount: pl.attributes.trackCount,
+              image: pl.attributes.artwork?.url
+                ?.replace("{w}", "64")
+                ?.replace("{h}", "64"),
+            })),
+          );
+        } catch {
+          setPlaylists([]);
+        }
+      }
+      setIsPlaylistsLoading(false);
+    }
+    loadPlaylists();
+  }, [navTab, token, musicService]);
+
+  // ===== Play画面: プレイリスト詳細取得 =====
+  const handleOpenPlaylist = async (playlist) => {
+    setSelectedPlaylist(playlist);
+    setNewPlaylistName(playlist.name);
+    setIsPlaylistTracksLoading(true);
+    if (musicService === "spotify") {
+      const items = await getPlaylistTracksAll(playlist.id, token);
+      setPlaylistTracks(
+        items
+          .filter((i) => i?.track)
+          .map((i) => ({
+            id: i.track.id,
+            uri: `spotify:track:${i.track.id}`,
+            title: i.track.name,
+            artist: i.track.artists[0]?.name || "Unknown",
+            image: i.track.album?.images[2]?.url,
+          })),
+      );
+    } else {
+      try {
+        const music = MusicKit.getInstance();
+        const result = await music.api.music(
+          `/v1/me/library/playlists/${playlist.id}/tracks?limit=100`,
+        );
+        setPlaylistTracks(
+          (result.data.data || []).map((t) => ({
+            id: t.id,
+            uri: t.id,
+            title: t.attributes.name,
+            artist: t.attributes.artistName,
+            image: t.attributes.artwork?.url
+              ?.replace("{w}", "64")
+              ?.replace("{h}", "64"),
+          })),
+        );
+      } catch {
+        setPlaylistTracks([]);
+      }
+    }
+    setIsPlaylistTracksLoading(false);
+  };
+
+  // ===== Play画面: 曲削除 =====
+  const handleRemoveTrack = async (trackUri, index) => {
+    if (musicService === "spotify") {
+      await removeTracksFromPlaylist(token, selectedPlaylist.id, [trackUri]);
+    } else {
+      // Apple Musicはライブラリプレイリストの曲削除
+      try {
+        const music = MusicKit.getInstance();
+        await music.api.music(
+          `/v1/me/library/playlists/${selectedPlaylist.id}/tracks`,
+          {},
+          {
+            fetchOptions: {
+              method: "DELETE",
+              body: JSON.stringify({
+                data: [{ id: trackUri, type: "library-songs" }],
+              }),
+            },
+          },
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setPlaylistTracks((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // ===== Play画面: プレイリスト名変更 =====
+  const handleRenamePlaylist = async () => {
+    if (!newPlaylistName.trim()) return;
+    if (musicService === "spotify") {
+      await renamePlaylist(token, selectedPlaylist.id, newPlaylistName);
+    } else {
+      try {
+        const music = MusicKit.getInstance();
+        await music.api.music(
+          `/v1/me/library/playlists/${selectedPlaylist.id}`,
+          {},
+          {
+            fetchOptions: {
+              method: "PATCH",
+              body: JSON.stringify({ attributes: { name: newPlaylistName } }),
+            },
+          },
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setSelectedPlaylist((prev) => ({ ...prev, name: newPlaylistName }));
+    setPlaylists((prev) =>
+      prev.map((pl) =>
+        pl.id === selectedPlaylist.id ? { ...pl, name: newPlaylistName } : pl,
+      ),
+    );
+    setEditingPlaylistName(false);
+  };
+
+  // ===== Play画面: シェア =====
+  const handleSharePlaylist = () => {
+    const url =
+      musicService === "spotify"
+        ? `https://open.spotify.com/playlist/${selectedPlaylist.id}`
+        : `https://music.apple.com/library/playlist/${selectedPlaylist.id}`;
+    navigator.clipboard.writeText(url);
+    alert("URLをコピーしました！");
+  };
+
+  // ===== Play画面: ドラッグ&ドロップ並び替え =====
+  const handleDragStart = (index) => setDragIndex(index);
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+  const handleDrop = async (e, dropIndex) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const reordered = [...playlistTracks];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    setPlaylistTracks(reordered);
+    setDragIndex(null);
+    setDragOverIndex(null);
+    if (musicService === "spotify") {
+      await reorderPlaylistTracks(
+        token,
+        selectedPlaylist.id,
+        dragIndex,
+        dropIndex > dragIndex ? dropIndex + 1 : dropIndex,
+      );
+    }
+  };
+
+  // ===== Play画面: タッチ並び替え（モバイル）=====
+  const touchStartY = useRef(null);
+  const touchDragIndex = useRef(null);
+  const handleTouchStart = (e, index) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchDragIndex.current = index;
+    setDragIndex(index);
+  };
+  const handleTouchMove = (e) => {
+    const y = e.touches[0].clientY;
+    const elements = document.querySelectorAll(".playlist-track-item");
+    let overIndex = null;
+    elements.forEach((el, i) => {
+      const rect = el.getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) overIndex = i;
+    });
+    if (overIndex !== null) setDragOverIndex(overIndex);
+  };
+  const handleTouchEnd = async () => {
+    if (
+      touchDragIndex.current !== null &&
+      dragOverIndex !== null &&
+      touchDragIndex.current !== dragOverIndex
+    ) {
+      const reordered = [...playlistTracks];
+      const [moved] = reordered.splice(touchDragIndex.current, 1);
+      reordered.splice(dragOverIndex, 0, moved);
+      setPlaylistTracks(reordered);
+      if (musicService === "spotify") {
+        await reorderPlaylistTracks(
+          token,
+          selectedPlaylist.id,
+          touchDragIndex.current,
+          dragOverIndex > touchDragIndex.current
+            ? dragOverIndex + 1
+            : dragOverIndex,
+        );
+      }
+    }
+    setDragIndex(null);
+    setDragOverIndex(null);
+    touchDragIndex.current = null;
+  };
+
   // ===== 初期化中 =====
   if (isInitializing) {
     return (
@@ -848,13 +1081,313 @@ function App() {
             <span className="nav-icon">≡</span>
             Tracks
           </button>
-          <button className="nav-item">
+          <button className="nav-item" onClick={() => setNavTab("play")}>
             <span className="nav-icon">▶</span>
             Playing
           </button>
           <button className="nav-item">
             <span className="nav-icon">⚙</span>
             Settings
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== Play画面 =====
+  if (navTab === "play" && token) {
+    // プレイリスト詳細画面
+    if (selectedPlaylist) {
+      return (
+        <div className="app">
+          <div className="app-header">
+            <button
+              onClick={() => {
+                setSelectedPlaylist(null);
+                setPlaylistTracks([]);
+                setEditingPlaylistName(false);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#00d672",
+                fontSize: "20px",
+                cursor: "pointer",
+              }}
+            >
+              ← 戻る
+            </button>
+            <h1>TEMPO</h1>
+          </div>
+
+          <div className="glass-card">
+            {editingPlaylistName ? (
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={newPlaylistName}
+                  onChange={(e) => setNewPlaylistName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleRenamePlaylist()}
+                  style={{ fontSize: "15px", fontWeight: 600 }}
+                  autoFocus
+                />
+                <button className="search-btn" onClick={handleRenamePlaylist}>
+                  保存
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <p className="section-label">PLAYLIST</p>
+                  <p
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 600,
+                      color: "#1a1a2e",
+                    }}
+                  >
+                    {selectedPlaylist.name}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      color: "#888",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {playlistTracks.length} TRACKS
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => setEditingPlaylistName(true)}
+                    style={{
+                      background: "none",
+                      border: "1px solid #ddd",
+                      borderRadius: "8px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      color: "#666",
+                    }}
+                  >
+                    ✏️ 名前変更
+                  </button>
+                  <button
+                    onClick={handleSharePlaylist}
+                    style={{
+                      background: "none",
+                      border: "1px solid #ddd",
+                      borderRadius: "8px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      color: "#666",
+                    }}
+                  >
+                    🔗 シェア
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {isPlaylistTracksLoading ? (
+            <div style={{ textAlign: "center", padding: "32px" }}>
+              <div className="loading-spinner" />
+            </div>
+          ) : (
+            <ul
+              className="song-list"
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {playlistTracks.map((track, index) => (
+                <li
+                  key={`${track.id}-${index}`}
+                  className="song-item playlist-track-item"
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onTouchStart={(e) => handleTouchStart(e, index)}
+                  style={{
+                    opacity: dragIndex === index ? 0.4 : 1,
+                    border:
+                      dragOverIndex === index && dragIndex !== index
+                        ? "2px solid #00d672"
+                        : "1px solid rgba(255,255,255,0.8)",
+                    cursor: "grab",
+                    transition: "opacity 0.15s",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#ccc",
+                      fontSize: "16px",
+                      flexShrink: 0,
+                      padding: "0 4px",
+                      cursor: "grab",
+                    }}
+                  >
+                    ⠿
+                  </span>
+                  {track.image && (
+                    <img
+                      src={track.image}
+                      alt=""
+                      style={{
+                        borderRadius: 8,
+                        flexShrink: 0,
+                        width: 44,
+                        height: 44,
+                      }}
+                    />
+                  )}
+                  <div className="song-info">
+                    <div className="song-title">{track.title}</div>
+                    <div className="song-artist">{track.artist}</div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveTrack(track.uri, index)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      fontSize: "18px",
+                      cursor: "pointer",
+                      color: "#ff5252",
+                      flexShrink: 0,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="bottom-nav">
+            <button className="nav-item" onClick={() => setNavTab("tracks")}>
+              <span className="nav-icon">◎</span>BPM
+            </button>
+            <button className="nav-item" onClick={() => setNavTab("tracks")}>
+              <span className="nav-icon">≡</span>Tracks
+            </button>
+            <button className="nav-item active">
+              <span className="nav-icon">▶</span>Playing
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">⚙</span>Settings
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // プレイリスト一覧画面
+    return (
+      <div className="app">
+        <div className="app-header">
+          <h1>TEMPO</h1>
+          <button
+            onClick={() => {
+              localStorage.removeItem(
+                musicService === "apple"
+                  ? "apple_library_cache"
+                  : "library_cache",
+              );
+              window.location.reload();
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#aaa",
+              fontSize: "12px",
+              cursor: "pointer",
+            }}
+          >
+            ● 接続済み
+          </button>
+        </div>
+
+        <p className="section-label" style={{ marginBottom: "12px" }}>
+          MY PLAYLISTS
+        </p>
+
+        {isPlaylistsLoading ? (
+          <div style={{ textAlign: "center", padding: "32px" }}>
+            <div className="loading-spinner" />
+          </div>
+        ) : playlists.length === 0 ? (
+          <p className="empty-state">プレイリストがありません</p>
+        ) : (
+          <ul className="song-list">
+            {playlists.map((pl) => (
+              <li
+                key={pl.id}
+                className="song-item"
+                style={{ cursor: "pointer" }}
+                onClick={() => handleOpenPlaylist(pl)}
+              >
+                {pl.images?.[0]?.url || pl.image ? (
+                  <img
+                    src={pl.images?.[0]?.url || pl.image}
+                    alt=""
+                    style={{
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      width: 44,
+                      height: 44,
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 8,
+                      background: "#e0e0e0",
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "18px",
+                    }}
+                  >
+                    ♪
+                  </div>
+                )}
+                <div className="song-info">
+                  <div className="song-title">{pl.name}</div>
+                  <div className="song-artist">
+                    {pl.tracks?.total ?? pl.trackCount ?? ""} tracks
+                  </div>
+                </div>
+                <span style={{ color: "#ccc", fontSize: "18px" }}>›</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="bottom-nav">
+          <button className="nav-item" onClick={() => setNavTab("tracks")}>
+            <span className="nav-icon">◎</span>BPM
+          </button>
+          <button className="nav-item" onClick={() => setNavTab("tracks")}>
+            <span className="nav-icon">≡</span>Tracks
+          </button>
+          <button className="nav-item active">
+            <span className="nav-icon">▶</span>Playing
+          </button>
+          <button className="nav-item">
+            <span className="nav-icon">⚙</span>Settings
           </button>
         </div>
       </div>
@@ -1091,7 +1624,7 @@ function App() {
           <span className="nav-icon">≡</span>
           Tracks
         </button>
-        <button className="nav-item">
+        <button className="nav-item" onClick={() => setNavTab("play")}>
           <span className="nav-icon">▶</span>
           Playing
         </button>

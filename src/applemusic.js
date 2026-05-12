@@ -124,3 +124,25 @@ export async function createAppleMusicPlaylist(name, trackIds) {
   );
   return response;
 }
+export async function getAppleMusicRecentlyPlayed() {
+  try {
+    const music = MusicKit.getInstance();
+    const result = await music.api.music("/v1/me/recent/played/tracks", {
+      limit: 50,
+    });
+    if (result.data.data) {
+      return result.data.data.map((song) => ({
+        id: song.id,
+        title: song.attributes.name,
+        artist: song.attributes.artistName,
+        bpm: null,
+        image: song.attributes.artwork?.url
+          ?.replace("{w}", "64")
+          ?.replace("{h}", "64"),
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
