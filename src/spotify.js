@@ -117,7 +117,7 @@ export async function searchTracks(query, token) {
 export async function getMyPlaylists(token) {
   try {
     const response = await fetch(
-      "https://api.spotify.com/v1/me/playlists?limit=50&fields=items(id,name,description,images,tracks(total))",
+      "https://api.spotify.com/v1/me/playlists?limit=50",
       {
         headers: { Authorization: `Bearer ${token}` },
       },
