@@ -321,12 +321,12 @@ function App() {
       setBgTotal(likedTracks.length);
       setIsLibraryLoading(false);
 
-      // Step2: いいね曲のBPM取得（取得済みのkをカウント）
+      // Step2: いいね曲のBPM取得
       await fetchBpmInBatches(likedTracks, "library_cache");
-      if (!cancelled) setBgLoaded(likedTracks.length);
       if (cancelled) return;
+      setBgLoaded(likedTracks.length);
 
-      // Step3: プレイリストをバックグラウンドで50件ずつ取得→BPM取得
+      // Step3: プレイリストをバックグラウンドで50件取得→BPM取得→追加を繰り返す
       (async () => {
         const playlistsData = await getMyPlaylists(token);
         if (cancelled) return;
@@ -335,7 +335,18 @@ function App() {
         const seenKeys = new Set(
           likedTracks.map((t) => `${t.title}|||${t.artist}`),
         );
-        let bgBuf = []; // backgroundTracksに溜める
+        let buf = [];
+        let totalCount = likedTracks.length;
+
+        const processBuf = async () => {
+          if (buf.length === 0 || cancelled) return;
+          const chunk = [...buf];
+          buf = [];
+          await fetchBpmInBatches(chunk, null);
+          if (cancelled) return;
+          setBackgroundTracks((prev) => [...prev, ...chunk]);
+          setBgLoaded((prev) => prev + chunk.length);
+        };
 
         for (const pl of playlistsData) {
           if (cancelled) return;
@@ -359,26 +370,18 @@ function App() {
               return true;
             });
 
-          bgBuf.push(...tracks);
-          setBgTotal(likedTracks.length + bgBuf.length);
+          totalCount += tracks.length;
+          buf.push(...tracks);
+          setBgTotal(totalCount);
 
-          // 50件溜まったらBPM取得してbackgroundTracksに追加
-          if (bgBuf.length >= CHUNK) {
-            const chunk = bgBuf.splice(0, CHUNK);
-            await fetchBpmInBatches(chunk, null);
-            if (cancelled) return;
-            setBackgroundTracks((prev) => [...prev, ...chunk]);
-            setBgLoaded((prev) => prev + chunk.length);
+          if (buf.length >= CHUNK) {
+            await processBuf();
           }
         }
 
-        // 残りをBPM取得してbackgroundTracksに追加
-        if (bgBuf.length > 0 && !cancelled) {
-          await fetchBpmInBatches(bgBuf, null);
-          if (!cancelled) {
-            setBackgroundTracks((prev) => [...prev, ...bgBuf]);
-            setBgLoaded((prev) => prev + bgBuf.length);
-          }
+        // 残りも処理
+        if (buf.length > 0 && !cancelled) {
+          await processBuf();
         }
 
         // 全曲キャッシュ保存
