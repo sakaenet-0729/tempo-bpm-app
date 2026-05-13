@@ -174,40 +174,31 @@ function App() {
         if (cached) {
           try {
             const cachedData = JSON.parse(cached);
-            // キャッシュ読み込み時もRecentlyPlayedをtitle+artistで並び替え
-            const recentTracks = await getAppleMusicRecentlyPlayed();
-            const recentKeys = recentTracks.map(
-              (t) => `${t.title}|||${t.artist}`,
+            const cachedBackground = localStorage.getItem(
+              "apple_background_cache",
             );
-            const recentKeySet = new Set(recentKeys);
-
-            const recentFirst = cachedData
-              .filter((t) => recentKeySet.has(`${t.title}|||${t.artist}`))
-              .sort((a, b) => {
-                const ai = recentKeys.indexOf(`${a.title}|||${a.artist}`);
-                const bi = recentKeys.indexOf(`${b.title}|||${b.artist}`);
-                return ai - bi;
-              });
-            const rest = cachedData.filter(
-              (t) => !recentKeySet.has(`${t.title}|||${t.artist}`),
-            );
-            const sorted = [...recentFirst, ...rest];
 
             if (!cancelled) {
-              setLibraryTracks(sorted);
+              setLibraryTracks(cachedData);
+              if (cachedBackground) {
+                setBackgroundTracks(JSON.parse(cachedBackground));
+              }
               setIsLibraryLoading(false);
             }
-            const needsBpm = sorted.filter((t) => t.bpm === null);
-            await fetchBpmInBatches(needsBpm, "apple_library_cache");
+            const needsBpm = cachedData.filter((t) => t.bpm === null);
+            if (needsBpm.length > 0) {
+              await fetchBpmInBatches(needsBpm, "apple_library_cache");
+            }
           } catch {
             localStorage.removeItem("apple_library_cache");
+            localStorage.removeItem("apple_background_cache");
           }
           return;
         }
 
         setIsLibraryLoading(true);
         try {
-          const [tracks, recentTracks] = await Promise.all([
+          const [allTracks, recentTracks] = await Promise.all([
             getAppleMusicLibrary(),
             getAppleMusicRecentlyPlayed(),
           ]);
@@ -215,32 +206,45 @@ function App() {
 
           let sorted;
           if (recentTracks.length > 0) {
-            // RecentlyPlayedがある場合はtitle+artistキーで並び替え
             const recentKeys = recentTracks.map(
               (t) => `${t.title}|||${t.artist}`,
             );
             const recentKeySet = new Set(recentKeys);
-            const recentFirst = tracks
+            const recentFirst = allTracks
               .filter((t) => recentKeySet.has(`${t.title}|||${t.artist}`))
-              .sort((a, b) => {
-                const ai = recentKeys.indexOf(`${a.title}|||${a.artist}`);
-                const bi = recentKeys.indexOf(`${b.title}|||${b.artist}`);
-                return ai - bi;
-              });
-            const rest = tracks.filter(
+              .sort(
+                (a, b) =>
+                  recentKeys.indexOf(`${a.title}|||${a.artist}`) -
+                  recentKeys.indexOf(`${b.title}|||${b.artist}`),
+              );
+            const rest = allTracks.filter(
               (t) => !recentKeySet.has(`${t.title}|||${t.artist}`),
             );
             sorted = [...recentFirst, ...rest];
           } else {
-            // RecentlyPlayedが空の場合はそのまま表示
-            sorted = tracks;
+            sorted = allTracks;
           }
 
-          setLibraryTracks(sorted);
-          localStorage.setItem("apple_library_cache", JSON.stringify(sorted));
-          setIsLibraryLoading(false);
+          // 最初の50件を表示、残りをbackgroundTracksに
+          const firstBatch = sorted.slice(0, 50);
+          const rest = sorted.slice(50);
 
-          await fetchBpmInBatches(sorted, "apple_library_cache");
+          if (!cancelled) {
+            setLibraryTracks(firstBatch);
+            setBackgroundTracks(rest);
+            localStorage.setItem(
+              "apple_library_cache",
+              JSON.stringify(firstBatch),
+            );
+            localStorage.setItem(
+              "apple_background_cache",
+              JSON.stringify(rest),
+            );
+            setIsLibraryLoading(false);
+          }
+
+          // 最初の50件のBPMを取得
+          await fetchBpmInBatches(firstBatch, "apple_library_cache");
         } catch (err) {
           console.error("Apple Music library error:", err);
           if (!cancelled) setIsLibraryLoading(false);
@@ -301,12 +305,22 @@ function App() {
         "spotify_top_ids",
         JSON.stringify(likedTracks.map((t) => t.id)),
       );
-      setLibraryTracks(likedTracks);
+
+      // 最初の50件を表示、残りはbackgroundTracksに
+      const firstBatch = likedTracks.slice(0, 50);
+      const likedRest = likedTracks.slice(50);
+
+      setLibraryTracks(firstBatch);
       setIsLibraryLoading(false);
 
-      // Step2: いいね曲のBPMを取得
-      await fetchBpmInBatches(likedTracks, null);
+      // Step2: 最初の50件のBPMを先に取得
+      await fetchBpmInBatches(firstBatch, null);
       if (cancelled) return;
+
+      // likedの残り分をbackgroundTracksに追加しておく
+      if (!cancelled && likedRest.length > 0) {
+        setBackgroundTracks((prev) => [...prev, ...likedRest]);
+      }
 
       // Step3: プレイリストの曲を並列取得してbackgroundTracksに保存
       const playlistsData = await getMyPlaylists(token);
@@ -357,10 +371,18 @@ function App() {
       });
 
       if (!cancelled) {
-        setBackgroundTracks(restTracks);
+        setBackgroundTracks((prev) => {
+          const existingKeys = new Set(
+            [...firstBatch, ...prev].map((t) => `${t.title}|||${t.artist}`),
+          );
+          const newTracks = restTracks.filter(
+            (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
+          );
+          return [...prev, ...newTracks];
+        });
         localStorage.setItem(
           "library_cache",
-          JSON.stringify([...likedTracks, ...restTracks]),
+          JSON.stringify([...firstBatch, ...restTracks]),
         );
       }
     }
