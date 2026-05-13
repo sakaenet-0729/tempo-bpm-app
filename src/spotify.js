@@ -117,7 +117,7 @@ export async function searchTracks(query, token) {
 export async function getMyPlaylists(token) {
   try {
     const response = await fetch(
-      "https://api.spotify.com/v1/me/playlists?limit=50",
+      "https://api.spotify.com/v1/me/playlists?limit=50&fields=items(id,name,description,images,tracks(total))",
       {
         headers: { Authorization: `Bearer ${token}` },
       },
@@ -378,7 +378,7 @@ export async function reorderPlaylistTracks(
 export async function getMyTopTracks(token, offset = 0) {
   try {
     const response = await fetch(
-      `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=short_term`,
+      `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=medium_term`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (response.status === 401) {

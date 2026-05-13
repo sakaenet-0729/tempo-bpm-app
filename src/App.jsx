@@ -72,6 +72,8 @@ function App() {
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [dragIndex, setDragIndex] = useState(null); // ドラッグ中のインデックス
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [showAllTracks, setShowAllTracks] = useState(false); // もっと見るフラグ
+  const [backgroundTracks, setBackgroundTracks] = useState([]); // 裏で取得した全曲
   const SCOPES =
     "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
 
@@ -249,7 +251,7 @@ function App() {
 
       setIsLibraryLoading(true);
 
-      // Step1: よく聞く曲を最優先で表示
+      // Step1: 6ヶ月以内によく聞く曲を最優先で表示（medium_term）
       const topData = await getMyTopTracks(token, 0);
       if (cancelled) return;
 
@@ -274,7 +276,7 @@ function App() {
       await fetchBpmInBatches(topTracks, null);
       if (cancelled) return;
 
-      // Step3: いいねした曲を追加
+      // Step3以降: 裏で全曲取得（UIはtopTracksのまま、もっと見るで追加）
       const likedData = await getMyTracks(token);
       if (cancelled) return;
 
@@ -288,22 +290,12 @@ function App() {
           image: item.track.album.images[2]?.url,
         }));
 
-      setLibraryTracks((prev) => {
-        const existingKeys = new Set(
-          prev.map((t) => `${t.title}|||${t.artist}`),
-        );
-        const newTracks = likedTracks.filter(
-          (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
-        );
-        return [...prev, ...newTracks];
-      });
-
-      // Step4: プレイリストの曲を追加（全プレイリスト取得後に一括マージ）
-      const playlists = await getMyPlaylists(token);
+      // プレイリストの曲も取得
+      const playlistsData = await getMyPlaylists(token);
       if (cancelled) return;
 
       const allPlaylistTracks = [];
-      for (const pl of playlists) {
+      for (const pl of playlistsData) {
         if (cancelled) return;
         await new Promise((r) => setTimeout(r, 1000));
         const items = await getPlaylistTracks(pl.id, token);
@@ -322,51 +314,31 @@ function App() {
         allPlaylistTracks.push(...tracks);
       }
 
-      // 全プレイリスト分をまとめて重複除去してからマージ
-      // title+artistで判定（同じ曲でもリマスター等でidが異なるケースに対応）
-      if (!cancelled) {
-        setLibraryTracks((prev) => {
-          const existingKeys = new Set(
-            prev.map((t) => `${t.title}|||${t.artist}`),
-          );
-          const seen = new Set(existingKeys);
-          const newTracks = allPlaylistTracks.filter((t) => {
-            const key = `${t.title}|||${t.artist}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          return [...prev, ...newTracks];
-        });
-      }
-
       if (cancelled) return;
 
-      // Step5: 全曲まとめてキャッシュ保存
-      let finalTracks = [];
-      setLibraryTracks((current) => {
-        const seen = new Set();
-        const unique = current.filter((track) => {
-          const key = `${track.title}|||${track.artist}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        if (unique.length === 0) {
-          setLibraryError(
-            "データ取得の制限中です。数分後にもう一度お試しください",
-          );
-        }
-        localStorage.setItem("library_cache", JSON.stringify(unique));
-        finalTracks = unique;
-        return unique;
+      // 全曲をマージ・重複除去してbackgroundTracksに保存
+      const allTracks = [...topTracks, ...likedTracks, ...allPlaylistTracks];
+      const seen = new Set();
+      const uniqueAll = allTracks.filter((track) => {
+        const key = `${track.title}|||${track.artist}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
       });
 
-      // Step6: 残りのBPM取得（setLibraryTracksコールバック外で呼ぶ）
-      await new Promise((r) => setTimeout(r, 100)); // Step5のstate更新を待つ
+      // topTracks以外をbackgroundTracksとして保持
+      const topKeys = new Set(topTracks.map((t) => `${t.title}|||${t.artist}`));
+      const restTracks = uniqueAll.filter(
+        (t) => !topKeys.has(`${t.title}|||${t.artist}`),
+      );
+
       if (!cancelled) {
-        const needsBpm = finalTracks.filter((t) => t.bpm === null);
-        await fetchBpmInBatches(needsBpm, "library_cache");
+        setBackgroundTracks(restTracks);
+        localStorage.setItem("library_cache", JSON.stringify(uniqueAll));
+        localStorage.setItem(
+          "spotify_top_ids",
+          JSON.stringify(topTracks.map((t) => t.id)),
+        );
       }
     }
 
@@ -710,8 +682,13 @@ function App() {
       setIsPlaylistsLoading(true);
       if (musicService === "spotify") {
         const data = await getMyPlaylists(token);
-        // TEMPOで作成したプレイリストのみ表示
-        setPlaylists(data.filter((pl) => pl.name?.startsWith("TEMPO")));
+        // "Created by TEMPO"のdescriptionで絞り込み（nameより確実）
+        setPlaylists(
+          data.filter(
+            (pl) =>
+              pl.description?.includes("TEMPO") || pl.name?.startsWith("TEMPO"),
+          ),
+        );
       } else {
         // Apple Music: ライブラリのプレイリスト取得
         try {
@@ -1213,6 +1190,19 @@ function App() {
             )}
           </div>
 
+          {playingTrackId && musicService === "spotify" && (
+            <div style={{ marginBottom: "8px" }}>
+              <iframe
+                src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
+                width="100%"
+                height="80"
+                style={{ border: "none", borderRadius: "12px" }}
+                allow="autoplay; clipboard-write; encrypted-media"
+                loading="lazy"
+              />
+            </div>
+          )}
+
           {isPlaylistTracksLoading ? (
             <div style={{ textAlign: "center", padding: "32px" }}>
               <div className="loading-spinner" />
@@ -1269,6 +1259,26 @@ function App() {
                     <div className="song-title">{track.title}</div>
                     <div className="song-artist">{track.artist}</div>
                   </div>
+                  {musicService === "spotify" && (
+                    <button
+                      onClick={() =>
+                        setPlayingTrackId(
+                          playingTrackId === track.id ? null : track.id,
+                        )
+                      }
+                      style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "18px",
+                        cursor: "pointer",
+                        color: playingTrackId === track.id ? "#00d672" : "#aaa",
+                        flexShrink: 0,
+                        padding: "4px",
+                      }}
+                    >
+                      {playingTrackId === track.id ? "⏸" : "▶"}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleRemoveTrack(track.uri, index)}
                     style={{
@@ -1625,6 +1635,31 @@ function App() {
                 style={{ textAlign: "center", margin: "16px 0" }}
               >
                 <div className="loading-spinner" />
+              </div>
+            )}
+          {/* backgroundTracksがある場合の「もっと見る」ボタン */}
+          {mode === "library" &&
+            !showAllTracks &&
+            backgroundTracks.length > 0 && (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                <button
+                  className="genre-btn"
+                  style={{ padding: "12px 32px", fontSize: "14px" }}
+                  onClick={() => {
+                    setShowAllTracks(true);
+                    setLibraryTracks((prev) => {
+                      const existingKeys = new Set(
+                        prev.map((t) => `${t.title}|||${t.artist}`),
+                      );
+                      const newTracks = backgroundTracks.filter(
+                        (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
+                      );
+                      return [...prev, ...newTracks];
+                    });
+                  }}
+                >
+                  もっと見る（あと {backgroundTracks.length} 曲）
+                </button>
               </div>
             )}{" "}
         </>
