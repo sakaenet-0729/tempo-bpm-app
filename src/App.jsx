@@ -325,26 +325,6 @@ function App() {
         }));
       if (cancelled) return;
 
-      const allPlaylistTracks = [];
-      for (const pl of playlistsData) {
-        if (cancelled) return;
-        await new Promise((r) => setTimeout(r, 1000));
-        const items = await getPlaylistTracks(pl.id, token);
-        const tracks = (items || [])
-          .filter((item) => item?.track || item?.item)
-          .map((item) => {
-            const t = item.track || item.item;
-            return {
-              id: t.id,
-              title: t.name,
-              artist: t.artists[0]?.name || "Unknown",
-              bpm: null,
-              image: t.album?.images[2]?.url,
-            };
-          });
-        allPlaylistTracks.push(...tracks);
-      }
-
       // Step4: プレイリストの曲も取得
       const playlistsData = await getMyPlaylists(token);
       if (cancelled) return;
@@ -1640,6 +1620,11 @@ function App() {
             {bpmProgress.total > 0 && (
               <span style={{ marginLeft: "8px", color: "#00d672" }}>
                 (BPM取得中 {bpmProgress.loaded}/{bpmProgress.total})
+              </span>
+            )}
+            {bpmProgress.total === 0 && backgroundTracks.length > 0 && (
+              <span style={{ marginLeft: "8px", color: "#aaa" }}>
+                (バックグラウンドで{backgroundTracks.length}曲取得済み)
               </span>
             )}
           </p>
