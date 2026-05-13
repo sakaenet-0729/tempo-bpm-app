@@ -292,6 +292,89 @@ export async function addTracksToPlaylist(token, playlistId, trackUris) {
   );
   return response.json();
 }
+// プレイリストの曲一覧取得（ページネーション対応）
+export async function getPlaylistTracksAll(playlistId, token) {
+  try {
+    let allItems = [];
+    let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+    while (url) {
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) break;
+      const data = await response.json();
+      allItems = [...allItems, ...(data.items || [])];
+      url = data.next || null;
+    }
+    return allItems;
+  } catch {
+    return [];
+  }
+}
+
+// プレイリスト名・説明を変更
+export async function renamePlaylist(token, playlistId, name) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    },
+  );
+  return response.ok;
+}
+
+// プレイリストから曲を削除
+export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
+  const body = { tracks: trackUris.map((uri) => ({ uri })) };
+  console.log("DELETE body:", JSON.stringify(body));
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    console.error("削除APIエラー:", response.status, err);
+  }
+  return response.ok;
+}
+
+// プレイリストの曲順を変更（1曲を別の位置に移動）
+export async function reorderPlaylistTracks(
+  token,
+  playlistId,
+  rangeStart,
+  insertBefore,
+) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        range_start: rangeStart,
+        insert_before: insertBefore,
+        range_length: 1,
+      }),
+    },
+  );
+  return response.ok;
+}
+
 export async function getMyTopTracks(token, offset = 0) {
   try {
     const response = await fetch(
