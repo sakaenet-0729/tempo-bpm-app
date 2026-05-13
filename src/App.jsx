@@ -174,16 +174,23 @@ function App() {
         if (cached) {
           try {
             const cachedData = JSON.parse(cached);
-            // キャッシュ読み込み時もRecentlyPlayedを先頭に並び替え
+            // キャッシュ読み込み時もRecentlyPlayedをtitle+artistで並び替え
             const recentTracks = await getAppleMusicRecentlyPlayed();
-            const recentIds = recentTracks.map((t) => t.id);
-            const recentSet = new Set(recentIds);
+            const recentKeys = recentTracks.map(
+              (t) => `${t.title}|||${t.artist}`,
+            );
+            const recentKeySet = new Set(recentKeys);
+
             const recentFirst = cachedData
-              .filter((t) => recentSet.has(t.id))
-              .sort(
-                (a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id),
-              );
-            const rest = cachedData.filter((t) => !recentSet.has(t.id));
+              .filter((t) => recentKeySet.has(`${t.title}|||${t.artist}`))
+              .sort((a, b) => {
+                const ai = recentKeys.indexOf(`${a.title}|||${a.artist}`);
+                const bi = recentKeys.indexOf(`${b.title}|||${b.artist}`);
+                return ai - bi;
+              });
+            const rest = cachedData.filter(
+              (t) => !recentKeySet.has(`${t.title}|||${t.artist}`),
+            );
             const sorted = [...recentFirst, ...rest];
 
             if (!cancelled) {
@@ -206,15 +213,22 @@ function App() {
           ]);
           if (cancelled) return;
 
-          // RecentlyPlayedのidを順番通りに保持
-          const recentIds = recentTracks.map((t) => t.id);
-          const recentSet = new Set(recentIds);
+          // title+artistキーで並び替え（ライブラリIDとカタログIDが異なるため）
+          const recentKeys = recentTracks.map(
+            (t) => `${t.title}|||${t.artist}`,
+          );
+          const recentKeySet = new Set(recentKeys);
 
-          // RecentlyPlayedを先頭に、残りを後ろに並べる
           const recentFirst = tracks
-            .filter((t) => recentSet.has(t.id))
-            .sort((a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id));
-          const rest = tracks.filter((t) => !recentSet.has(t.id));
+            .filter((t) => recentKeySet.has(`${t.title}|||${t.artist}`))
+            .sort((a, b) => {
+              const ai = recentKeys.indexOf(`${a.title}|||${a.artist}`);
+              const bi = recentKeys.indexOf(`${b.title}|||${b.artist}`);
+              return ai - bi;
+            });
+          const rest = tracks.filter(
+            (t) => !recentKeySet.has(`${t.title}|||${t.artist}`),
+          );
           const sorted = [...recentFirst, ...rest];
 
           setLibraryTracks(sorted);

@@ -127,7 +127,7 @@ export async function createAppleMusicPlaylist(name, trackIds) {
 export async function getAppleMusicRecentlyPlayed() {
   try {
     const music = MusicKit.getInstance();
-    const result = await music.api.music("/v1/me/recent/played/tracks", {
+    const result = await music.api.music("/v1/me/recent/played", {
       limit: 50,
     });
     if (result.data.data) {
