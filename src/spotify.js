@@ -378,7 +378,7 @@ export async function reorderPlaylistTracks(
 export async function getMyTopTracks(token, offset = 0) {
   try {
     const response = await fetch(
-      `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=medium_term`,
+      `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=short_term`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (response.status === 401) {
