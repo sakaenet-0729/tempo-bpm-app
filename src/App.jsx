@@ -14,6 +14,7 @@ import {
   createPlaylist,
   addTracksToPlaylist,
   getMyTopTracks,
+  getRecentlyPlayed,
   renamePlaylist,
   removeTracksFromPlaylist,
   reorderPlaylistTracks,
@@ -173,11 +174,23 @@ function App() {
         if (cached) {
           try {
             const cachedData = JSON.parse(cached);
+            // キャッシュ読み込み時もRecentlyPlayedを先頭に並び替え
+            const recentTracks = await getAppleMusicRecentlyPlayed();
+            const recentIds = recentTracks.map((t) => t.id);
+            const recentSet = new Set(recentIds);
+            const recentFirst = cachedData
+              .filter((t) => recentSet.has(t.id))
+              .sort(
+                (a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id),
+              );
+            const rest = cachedData.filter((t) => !recentSet.has(t.id));
+            const sorted = [...recentFirst, ...rest];
+
             if (!cancelled) {
-              setLibraryTracks(cachedData);
+              setLibraryTracks(sorted);
               setIsLibraryLoading(false);
             }
-            const needsBpm = cachedData.filter((t) => t.bpm === null);
+            const needsBpm = sorted.filter((t) => t.bpm === null);
             await fetchBpmInBatches(needsBpm, "apple_library_cache");
           } catch {
             localStorage.removeItem("apple_library_cache");
@@ -251,7 +264,39 @@ function App() {
 
       setIsLibraryLoading(true);
 
-      // Step1: いいね曲を最初に表示（Top Tracksは403制限のためスキップ）
+      // Step1: 最近再生した曲を最優先で表示
+      const recentData = await getRecentlyPlayed(token);
+      if (cancelled) return;
+
+      const seen1 = new Set();
+      const recentTracks = (recentData.items || [])
+        .filter((item) => item?.track)
+        .map((item) => ({
+          id: item.track.id,
+          title: item.track.name,
+          artist: item.track.artists[0].name,
+          bpm: null,
+          image: item.track.album.images[2]?.url,
+        }))
+        .filter((track) => {
+          const key = `${track.title}|||${track.artist}`;
+          if (seen1.has(key)) return false;
+          seen1.add(key);
+          return true;
+        });
+
+      localStorage.setItem(
+        "spotify_top_ids",
+        JSON.stringify(recentTracks.map((t) => t.id)),
+      );
+      setLibraryTracks(recentTracks);
+      setIsLibraryLoading(false);
+
+      // Step2: 最近再生した曲のBPMを先に取得
+      await fetchBpmInBatches(recentTracks, null);
+      if (cancelled) return;
+
+      // Step3: 裏でいいね曲＋プレイリストを取得
       const likedData = await getMyTracks(token);
       if (cancelled) return;
 
@@ -264,19 +309,29 @@ function App() {
           bpm: null,
           image: item.track.album.images[2]?.url,
         }));
-
-      localStorage.setItem(
-        "spotify_top_ids",
-        JSON.stringify(likedTracks.slice(0, 50).map((t) => t.id)),
-      );
-      setLibraryTracks(likedTracks);
-      setIsLibraryLoading(false);
-
-      // Step2: いいね曲のBPMを先に取得（3曲並列）
-      await fetchBpmInBatches(likedTracks, null);
       if (cancelled) return;
 
-      // Step3: 裏でプレイリストの曲も取得
+      const allPlaylistTracks = [];
+      for (const pl of playlistsData) {
+        if (cancelled) return;
+        await new Promise((r) => setTimeout(r, 1000));
+        const items = await getPlaylistTracks(pl.id, token);
+        const tracks = (items || [])
+          .filter((item) => item?.track || item?.item)
+          .map((item) => {
+            const t = item.track || item.item;
+            return {
+              id: t.id,
+              title: t.name,
+              artist: t.artists[0]?.name || "Unknown",
+              bpm: null,
+              image: t.album?.images[2]?.url,
+            };
+          });
+        allPlaylistTracks.push(...tracks);
+      }
+
+      // Step4: プレイリストの曲も取得
       const playlistsData = await getMyPlaylists(token);
       if (cancelled) return;
 
@@ -303,7 +358,7 @@ function App() {
       if (cancelled) return;
 
       // 全曲マージ・重複除去してbackgroundTracksに保存
-      const allTracks = [...likedTracks, ...allPlaylistTracks];
+      const allTracks = [...recentTracks, ...likedTracks, ...allPlaylistTracks];
       const seen = new Set();
       const uniqueAll = allTracks.filter((track) => {
         const key = `${track.title}|||${track.artist}`;
@@ -312,11 +367,11 @@ function App() {
         return true;
       });
 
-      const likedKeys = new Set(
-        likedTracks.map((t) => `${t.title}|||${t.artist}`),
+      const recentKeys = new Set(
+        recentTracks.map((t) => `${t.title}|||${t.artist}`),
       );
       const restTracks = uniqueAll.filter(
-        (t) => !likedKeys.has(`${t.title}|||${t.artist}`),
+        (t) => !recentKeys.has(`${t.title}|||${t.artist}`),
       );
 
       if (!cancelled) {

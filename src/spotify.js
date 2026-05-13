@@ -375,6 +375,26 @@ export async function reorderPlaylistTracks(
   return response.ok;
 }
 
+// 最近再生した曲を取得（Top Tracksの代替）
+export async function getRecentlyPlayed(token) {
+  try {
+    const response = await fetch(
+      "https://api.spotify.com/v1/me/player/recently-played?limit=50",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (response.status === 401) {
+      localStorage.removeItem("spotify_token");
+      window.location.reload();
+      return { items: [] };
+    }
+    if (!response.ok) return { items: [] };
+    const data = await response.json();
+    return data;
+  } catch {
+    return { items: [] };
+  }
+}
+
 export async function getMyTopTracks(token, offset = 0) {
   try {
     const response = await fetch(
