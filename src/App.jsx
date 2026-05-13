@@ -73,9 +73,10 @@ function App() {
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [dragIndex, setDragIndex] = useState(null); // ドラッグ中のインデックス
   const [dragOverIndex, setDragOverIndex] = useState(null);
-  const [showAllTracks, setShowAllTracks] = useState(false); // もっと見るフラグ
-  const [backgroundTracks, setBackgroundTracks] = useState([]); // 裏で取得した全曲
-  const [bgProgress, setBgProgress] = useState({ loaded: 0, total: 0 }); // バックグラウンド取得進捗
+  const [showAllTracks, setShowAllTracks] = useState(false);
+  const [backgroundTracks, setBackgroundTracks] = useState([]);
+  const [bgTotal, setBgTotal] = useState(0); // ライブラリ総曲数
+  const [bgLoaded, setBgLoaded] = useState(0); // BPM取得済み曲数
   const SCOPES =
     "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
 
@@ -302,7 +303,7 @@ function App() {
 
       setIsLibraryLoading(true);
 
-      // Step1: いいね曲だけ先に取得→即表示
+      // Step1: いいね曲を即取得→即表示
       const likedData = await getMyTracks(token);
       if (cancelled) return;
 
@@ -317,83 +318,81 @@ function App() {
         }));
 
       setLibraryTracks(likedTracks);
+      setBgTotal(likedTracks.length);
       setIsLibraryLoading(false);
 
-      // Step2: いいね曲のBPM取得
+      // Step2: いいね曲のBPM取得（取得済みのkをカウント）
       await fetchBpmInBatches(likedTracks, "library_cache");
+      if (!cancelled) setBgLoaded(likedTracks.length);
       if (cancelled) return;
 
-      // Step3: プレイリストは完全にバックグラウンドで取得（awaitしない）
+      // Step3: プレイリストをバックグラウンドで50件ずつ取得→BPM取得
       (async () => {
         const playlistsData = await getMyPlaylists(token);
         if (cancelled) return;
 
-        // プレイリスト総数を進捗の分母に設定
-        const allPlaylistTracks = [];
-        const PL_BATCH = 3;
-        let fetchedPlCount = 0;
+        const CHUNK = 50;
+        const seenKeys = new Set(
+          likedTracks.map((t) => `${t.title}|||${t.artist}`),
+        );
+        let bgBuf = []; // backgroundTracksに溜める
 
-        setBgProgress({ loaded: 0, total: playlistsData.length });
-
-        for (let i = 0; i < playlistsData.length; i += PL_BATCH) {
+        for (const pl of playlistsData) {
           if (cancelled) return;
-          const batch = playlistsData.slice(i, i + PL_BATCH);
-          const results = await Promise.all(
-            batch.map((pl) => getPlaylistTracks(pl.id, token)),
-          );
+          const items = await getPlaylistTracks(pl.id, token);
+          const tracks = (items || [])
+            .filter((item) => item?.track || item?.item)
+            .map((item) => {
+              const t = item.track || item.item;
+              return {
+                id: t.id,
+                title: t.name,
+                artist: t.artists[0]?.name || "Unknown",
+                bpm: null,
+                image: t.album?.images[2]?.url,
+              };
+            })
+            .filter((t) => {
+              const key = `${t.title}|||${t.artist}`;
+              if (seenKeys.has(key)) return false;
+              seenKeys.add(key);
+              return true;
+            });
 
-          for (const items of results) {
-            const tracks = (items || [])
-              .filter((item) => item?.track || item?.item)
-              .map((item) => {
-                const t = item.track || item.item;
-                return {
-                  id: t.id,
-                  title: t.name,
-                  artist: t.artists[0]?.name || "Unknown",
-                  bpm: null,
-                  image: t.album?.images[2]?.url,
-                };
-              });
-            allPlaylistTracks.push(...tracks);
-            fetchedPlCount++;
+          bgBuf.push(...tracks);
+          setBgTotal(likedTracks.length + bgBuf.length);
+
+          // 50件溜まったらBPM取得してbackgroundTracksに追加
+          if (bgBuf.length >= CHUNK) {
+            const chunk = bgBuf.splice(0, CHUNK);
+            await fetchBpmInBatches(chunk, null);
+            if (cancelled) return;
+            setBackgroundTracks((prev) => [...prev, ...chunk]);
+            setBgLoaded((prev) => prev + chunk.length);
           }
+        }
 
-          // 進捗を更新してbackgroundTracksに追加
-          setBgProgress({
-            loaded: fetchedPlCount,
-            total: playlistsData.length,
-          });
-
-          setBackgroundTracks((prev) => {
-            const existingKeys = new Set(
-              [...likedTracks, ...prev].map((t) => `${t.title}|||${t.artist}`),
-            );
-            const newTracks = allPlaylistTracks.filter(
-              (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
-            );
-            return newTracks;
-          });
-
-          if (i + PL_BATCH < playlistsData.length) {
-            await new Promise((r) => setTimeout(r, 500));
+        // 残りをBPM取得してbackgroundTracksに追加
+        if (bgBuf.length > 0 && !cancelled) {
+          await fetchBpmInBatches(bgBuf, null);
+          if (!cancelled) {
+            setBackgroundTracks((prev) => [...prev, ...bgBuf]);
+            setBgLoaded((prev) => prev + bgBuf.length);
           }
         }
 
         // 全曲キャッシュ保存
         if (!cancelled) {
-          setLibraryTracks((current) => {
-            const seen = new Set(
-              current.map((t) => `${t.title}|||${t.artist}`),
-            );
-            const extra = allPlaylistTracks.filter(
-              (t) => !seen.has(`${t.title}|||${t.artist}`),
-            );
-            const all = [...current, ...extra];
-            localStorage.setItem("library_cache", JSON.stringify(all));
-            return current; // 表示はそのまま（もっと見るボタンで追加）
+          setBackgroundTracks((bg) => {
+            setLibraryTracks((current) => {
+              localStorage.setItem(
+                "library_cache",
+                JSON.stringify([...current, ...bg]),
+              );
+              return current;
+            });
+            return bg;
           });
-          setBgProgress({ loaded: 0, total: 0 }); // 完了でリセット
         }
       })();
     }
@@ -1698,48 +1697,34 @@ function App() {
                 <div className="loading-spinner" />
               </div>
             )}
-          {/* backgroundTracksがある場合の「もっと見る」ボタン */}
-          {mode === "library" && backgroundTracks.length > 0 && (
-            <div style={{ textAlign: "center", margin: "16px 0" }}>
-              <button
-                className="genre-btn"
-                style={{ padding: "12px 32px", fontSize: "14px" }}
-                onClick={() => {
-                  setShowAllTracks(true);
-                  setLibraryTracks((prev) => {
-                    const existingKeys = new Set(
-                      prev.map((t) => `${t.title}|||${t.artist}`),
-                    );
-                    const newTracks = backgroundTracks.filter(
-                      (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
-                    );
-                    return [...prev, ...newTracks];
-                  });
-                  setBackgroundTracks([]);
-                }}
-              >
-                もっと見る（+{backgroundTracks.length}曲
-                {bgProgress.total > 0
-                  ? ` / 取得中 ${bgProgress.loaded}/${bgProgress.total}`
-                  : ""}
-                ）
-              </button>
-            </div>
-          )}
-          {/* バックグラウンド取得中でbackgroundTracksがまだない場合 */}
+          {/* もっと見るボタン */}
           {mode === "library" &&
-            backgroundTracks.length === 0 &&
-            bgProgress.total > 0 && (
-              <div
-                style={{
-                  textAlign: "center",
-                  margin: "16px 0",
-                  color: "#aaa",
-                  fontSize: "13px",
-                }}
-              >
-                バックグラウンドで取得中... {bgProgress.loaded}/
-                {bgProgress.total}
+            (backgroundTracks.length > 0 || bgTotal > bgLoaded) && (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                {backgroundTracks.length > 0 ? (
+                  <button
+                    className="genre-btn"
+                    style={{ padding: "12px 32px", fontSize: "14px" }}
+                    onClick={() => {
+                      setLibraryTracks((prev) => {
+                        const existingKeys = new Set(
+                          prev.map((t) => `${t.title}|||${t.artist}`),
+                        );
+                        const newTracks = backgroundTracks.filter(
+                          (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
+                        );
+                        return [...prev, ...newTracks];
+                      });
+                      setBackgroundTracks([]);
+                    }}
+                  >
+                    もっと見る（{bgLoaded}/{bgTotal}曲取得中）
+                  </button>
+                ) : (
+                  <p style={{ color: "#aaa", fontSize: "13px" }}>
+                    取得中... {bgLoaded}/{bgTotal}曲
+                  </p>
+                )}
               </div>
             )}
         </>
