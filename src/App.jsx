@@ -308,28 +308,38 @@ function App() {
       await fetchBpmInBatches(likedTracks, null);
       if (cancelled) return;
 
-      // Step3: 裏でプレイリストの曲を取得してbackgroundTracksに保存
+      // Step3: プレイリストの曲を並列取得してbackgroundTracksに保存
       const playlistsData = await getMyPlaylists(token);
       if (cancelled) return;
 
+      // 3プレイリストずつ並列取得
       const allPlaylistTracks = [];
-      for (const pl of playlistsData) {
+      const BATCH = 3;
+      for (let i = 0; i < playlistsData.length; i += BATCH) {
         if (cancelled) return;
-        await new Promise((r) => setTimeout(r, 1000));
-        const items = await getPlaylistTracks(pl.id, token);
-        const tracks = (items || [])
-          .filter((item) => item?.track || item?.item)
-          .map((item) => {
-            const t = item.track || item.item;
-            return {
-              id: t.id,
-              title: t.name,
-              artist: t.artists[0]?.name || "Unknown",
-              bpm: null,
-              image: t.album?.images[2]?.url,
-            };
-          });
-        allPlaylistTracks.push(...tracks);
+        const batch = playlistsData.slice(i, i + BATCH);
+        const results = await Promise.all(
+          batch.map((pl) => getPlaylistTracks(pl.id, token)),
+        );
+        for (const items of results) {
+          const tracks = (items || [])
+            .filter((item) => item?.track || item?.item)
+            .map((item) => {
+              const t = item.track || item.item;
+              return {
+                id: t.id,
+                title: t.name,
+                artist: t.artists[0]?.name || "Unknown",
+                bpm: null,
+                image: t.album?.images[2]?.url,
+              };
+            });
+          allPlaylistTracks.push(...tracks);
+        }
+        // バッチ間は500ms待機（APIレート制限対策）
+        if (i + BATCH < playlistsData.length) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
       }
 
       if (cancelled) return;
