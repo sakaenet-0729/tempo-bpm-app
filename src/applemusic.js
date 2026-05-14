@@ -60,25 +60,34 @@ export async function getAppleMusicLibrary() {
   const limit = 100;
 
   while (true) {
-    const result = await music.api.music(
-      `/v1/me/library/songs?limit=${limit}&offset=${offset}`,
-    );
+    try {
+      const result = await music.api.music(
+        `/v1/me/library/songs?limit=${limit}&offset=${offset}`,
+      );
 
-    if (result.data.data && result.data.data.length > 0) {
-      const tracks = result.data.data.map((song) => ({
-        id: song.id,
-        title: song.attributes.name,
-        artist: song.attributes.artistName,
-        bpm: null,
-        image: song.attributes.artwork?.url
-          ?.replace("{w}", "64")
-          ?.replace("{h}", "64"),
-      }));
-      allTracks = [...allTracks, ...tracks];
-      offset += limit;
+      if (result.data.data && result.data.data.length > 0) {
+        const tracks = result.data.data.map((song) => ({
+          id: song.id,
+          title: song.attributes.name,
+          artist: song.attributes.artistName,
+          bpm: null,
+          image: song.attributes.artwork?.url
+            ?.replace("{w}", "64")
+            ?.replace("{h}", "64"),
+        }));
+        allTracks = [...allTracks, ...tracks];
+        offset += limit;
 
-      if (result.data.data.length < limit) break;
-    } else {
+        if (result.data.data.length < limit) break;
+      } else {
+        break;
+      }
+    } catch (err) {
+      // 403やその他エラーが来たら取得済み分で終了
+      console.warn(
+        `Apple Music library fetch stopped at offset ${offset}:`,
+        err?.message || err,
+      );
       break;
     }
   }
