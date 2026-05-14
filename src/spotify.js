@@ -151,8 +151,33 @@ export async function getPlaylistTracks(playlistId, token) {
   }
 }
 
+// APIが生きているか1回だけチェック
+let bpmApiAlive = null;
+export async function checkBpmApi() {
+  if (bpmApiAlive !== null) return bpmApiAlive;
+  const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
+  if (!API_KEY) {
+    bpmApiAlive = false;
+    return false;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch(
+      `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=test`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timer);
+    bpmApiAlive = response.status !== 503 && response.status !== 0;
+    return bpmApiAlive;
+  } catch {
+    bpmApiAlive = false;
+    return false;
+  }
+}
+
 // タイムアウト付きfetch（APIサーバーが落ちていても固まらない）
-async function fetchWithTimeout(url, timeoutMs = 8000) {
+async function fetchWithTimeout(url, timeoutMs = 2000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

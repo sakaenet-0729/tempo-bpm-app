@@ -6,6 +6,7 @@ import {
   getAccessToken,
   searchTracks,
   getTrackBpm,
+  checkBpmApi,
   getMyTracks,
   getMyPlaylists,
   getPlaylistTracks,
@@ -131,8 +132,11 @@ function App() {
     // バックグラウンド用：BPM取得結果をchunk自体に埋め込んで返す
     async function fetchBpmForBackground(tracks) {
       const BATCH_SIZE = 3;
-      const BATCH_DELAY = 1200;
+      const BATCH_DELAY = 300;
       const result = [...tracks];
+
+      const apiAlive = await checkBpmApi();
+      if (!apiAlive) return result; // 落ちていたらbpm:nullのまま返す
 
       for (let i = 0; i < result.length; i += BATCH_SIZE) {
         if (cancelled) return result;
@@ -152,9 +156,15 @@ function App() {
     // 3曲ずつ並列でBPM取得（APIレート制限に配慮しつつ高速化）
     async function fetchBpmInBatches(tracks, cacheKey) {
       const BATCH_SIZE = 3;
-      const BATCH_DELAY = 1200;
+      const BATCH_DELAY = 300;
 
-      // 進捗の初期値をセット
+      // APIが落ちていたら即スキップ
+      const apiAlive = await checkBpmApi();
+      if (!apiAlive) {
+        setBpmProgress({ loaded: 0, total: 0 });
+        return;
+      }
+
       setBpmProgress({ loaded: 0, total: tracks.length });
 
       for (let i = 0; i < tracks.length; i += BATCH_SIZE) {
@@ -184,7 +194,6 @@ function App() {
         }
       }
 
-      // 完了したらリセット
       setBpmProgress({ loaded: 0, total: 0 });
     }
 
