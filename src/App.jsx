@@ -128,6 +128,27 @@ function App() {
       }
     }
 
+    // バックグラウンド用：BPM取得結果をchunk自体に埋め込んで返す
+    async function fetchBpmForBackground(tracks) {
+      const BATCH_SIZE = 3;
+      const BATCH_DELAY = 1200;
+      const result = [...tracks];
+
+      for (let i = 0; i < result.length; i += BATCH_SIZE) {
+        if (cancelled) return result;
+        const batch = result.slice(i, i + BATCH_SIZE);
+        const bpmResults = await Promise.all(batch.map(fetchBpmSafely));
+        bpmResults.forEach((r) => {
+          const idx = result.findIndex((t) => t.id === r.id);
+          if (idx !== -1) result[idx] = { ...result[idx], bpm: r.bpm };
+        });
+        if (i + BATCH_SIZE < result.length) {
+          await new Promise((r) => setTimeout(r, BATCH_DELAY));
+        }
+      }
+      return result;
+    }
+
     // 3曲ずつ並列でBPM取得（APIレート制限に配慮しつつ高速化）
     async function fetchBpmInBatches(tracks, cacheKey) {
       const BATCH_SIZE = 3;
@@ -342,10 +363,12 @@ function App() {
           if (buf.length === 0 || cancelled) return;
           const chunk = [...buf];
           buf = [];
-          await fetchBpmInBatches(chunk, null);
+          // BPM取得してchunk自体に埋め込む
+          const chunkWithBpm = await fetchBpmForBackground(chunk);
           if (cancelled) return;
-          setBackgroundTracks((prev) => [...prev, ...chunk]);
-          setBgLoaded((prev) => prev + chunk.length);
+          // BPM取得済みのものだけbackgroundTracksに追加
+          setBackgroundTracks((prev) => [...prev, ...chunkWithBpm]);
+          setBgLoaded((prev) => prev + chunkWithBpm.length);
         };
 
         for (const pl of playlistsData) {
