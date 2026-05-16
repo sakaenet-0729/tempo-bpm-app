@@ -1540,16 +1540,7 @@ function App() {
             padding: "32px 16px",
           }}
         >
-          <h1
-            style={{
-              fontSize: "48px",
-              fontWeight: 700,
-              letterSpacing: "8px",
-              color: "#1a1a2e",
-            }}
-          >
-            TEMPO
-          </h1>
+          <h1>TEMPO</h1>
           <div
             style={{
               display: "flex",
