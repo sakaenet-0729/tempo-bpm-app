@@ -788,7 +788,12 @@ function App() {
           );
           setPlaylists(
             (result.data.data || [])
-              .filter((pl) => pl.attributes.description?.standard?.includes("Created by TEMPO") || pl.attributes.name?.startsWith("TEMPO"))
+              .filter(
+                (pl) =>
+                  pl.attributes.description?.standard?.includes(
+                    "Created by TEMPO",
+                  ) || pl.attributes.name?.startsWith("TEMPO"),
+              )
               .map((pl) => ({
                 id: pl.id,
                 name: pl.attributes.name,
@@ -852,7 +857,9 @@ function App() {
   // ===== Play画面: 曲削除 =====
   const handleRemoveTrack = async (trackUri, index) => {
     if (musicService === "spotify") {
-      const ok = await removeTracksFromPlaylist(token, selectedPlaylist.id, [trackUri]);
+      const ok = await removeTracksFromPlaylist(token, selectedPlaylist.id, [
+        trackUri,
+      ]);
       if (!ok) {
         alert("Failed to delete. Please log out and log in again.");
         return;
@@ -863,9 +870,18 @@ function App() {
         await music.api.music(
           `/v1/me/library/playlists/${selectedPlaylist.id}/tracks`,
           {},
-          { fetchOptions: { method: "DELETE", body: JSON.stringify({ data: [{ id: trackUri, type: "library-songs" }] }) } },
+          {
+            fetchOptions: {
+              method: "DELETE",
+              body: JSON.stringify({
+                data: [{ id: trackUri, type: "library-songs" }],
+              }),
+            },
+          },
         );
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+      }
     }
     setPlaylistTracks((prev) => prev.filter((_, i) => i !== index));
   };
@@ -1166,13 +1182,32 @@ function App() {
         <div className="app">
           <div className="app-header">
             <button
-              onClick={() => { setSelectedPlaylist(null); setPlaylistTracks([]); setEditingPlaylistName(false); }}
-              style={{ background: "none", border: "none", color: "#00d672", fontSize: "20px", cursor: "pointer" }}
+              onClick={() => {
+                setSelectedPlaylist(null);
+                setPlaylistTracks([]);
+                setEditingPlaylistName(false);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#00d672",
+                fontSize: "20px",
+                cursor: "pointer",
+              }}
             >
               ← Back
             </button>
             <h1>TEMPO</h1>
-            <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#aaa", fontSize: "12px", cursor: "pointer" }}>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#aaa",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >
               Log out
             </button>
           </div>
@@ -1188,20 +1223,66 @@ function App() {
                   style={{ fontSize: "15px", fontWeight: 600 }}
                   autoFocus
                 />
-                <button className="search-btn" onClick={handleRenamePlaylist}>Save</button>
+                <button className="search-btn" onClick={handleRenamePlaylist}>
+                  Save
+                </button>
               </div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <div>
                   <p className="section-label">PLAYLIST</p>
-                  <p style={{ fontSize: "16px", fontWeight: 600, color: "#1a1a2e" }}>{selectedPlaylist.name}</p>
-                  <p style={{ fontSize: "13px", color: "#888", marginTop: "2px" }}>{playlistTracks.length} TRACKS</p>
+                  <p
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 600,
+                      color: "#1a1a2e",
+                    }}
+                  >
+                    {selectedPlaylist.name}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      color: "#888",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {playlistTracks.length} TRACKS
+                  </p>
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => setEditingPlaylistName(true)} style={{ background: "none", border: "1px solid #ddd", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", cursor: "pointer", color: "#666" }}>
+                  <button
+                    onClick={() => setEditingPlaylistName(true)}
+                    style={{
+                      background: "none",
+                      border: "1px solid #ddd",
+                      borderRadius: "8px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      color: "#666",
+                    }}
+                  >
                     ✏️ Rename
                   </button>
-                  <button onClick={handleSharePlaylist} style={{ background: "none", border: "1px solid #ddd", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", cursor: "pointer", color: "#666" }}>
+                  <button
+                    onClick={handleSharePlaylist}
+                    style={{
+                      background: "none",
+                      border: "1px solid #ddd",
+                      borderRadius: "8px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      color: "#666",
+                    }}
+                  >
                     🔗 Share
                   </button>
                 </div>
@@ -1227,7 +1308,11 @@ function App() {
               <div className="loading-spinner" />
             </div>
           ) : (
-            <ul className="song-list" onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+            <ul
+              className="song-list"
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
               {playlistTracks.map((track, index) => (
                 <li
                   key={`${track.id}-${index}`}
@@ -1239,15 +1324,40 @@ function App() {
                   onTouchStart={(e) => handleTouchStart(e, index)}
                   style={{
                     opacity: dragIndex === index ? 0.4 : 1,
-                    border: dragOverIndex === index && dragIndex !== index ? "2px solid #00d672" : "1px solid rgba(255,255,255,0.8)",
+                    border:
+                      dragOverIndex === index && dragIndex !== index
+                        ? "2px solid #00d672"
+                        : "1px solid rgba(255,255,255,0.8)",
                     cursor: "grab",
                     transition: "opacity 0.15s",
                     userSelect: "none",
                     WebkitUserSelect: "none",
                   }}
                 >
-                  <span style={{ color: "#ccc", fontSize: "16px", flexShrink: 0, padding: "0 8px", cursor: "grab", touchAction: "none" }}>⠿</span>
-                  {track.image && <img src={track.image} alt="" style={{ borderRadius: 8, flexShrink: 0, width: 44, height: 44 }} />}
+                  <span
+                    style={{
+                      color: "#ccc",
+                      fontSize: "16px",
+                      flexShrink: 0,
+                      padding: "0 8px",
+                      cursor: "grab",
+                      touchAction: "none",
+                    }}
+                  >
+                    ⠿
+                  </span>
+                  {track.image && (
+                    <img
+                      src={track.image}
+                      alt=""
+                      style={{
+                        borderRadius: 8,
+                        flexShrink: 0,
+                        width: 44,
+                        height: 44,
+                      }}
+                    />
+                  )}
                   <div className="song-info">
                     <div className="song-title">{track.title}</div>
                     <div className="song-artist">{track.artist}</div>
@@ -1256,7 +1366,9 @@ function App() {
                   <button
                     onClick={() => {
                       if (musicService === "spotify") {
-                        setPlayingTrackId(playingTrackId === track.id ? null : track.id);
+                        setPlayingTrackId(
+                          playingTrackId === track.id ? null : track.id,
+                        );
                       } else {
                         if (playingTrackId === track.id) {
                           pauseAppleMusic();
@@ -1267,13 +1379,29 @@ function App() {
                         }
                       }
                     }}
-                    style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: playingTrackId === track.id ? "#00d672" : "#aaa", flexShrink: 0, padding: "4px" }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      fontSize: "18px",
+                      cursor: "pointer",
+                      color: playingTrackId === track.id ? "#00d672" : "#aaa",
+                      flexShrink: 0,
+                      padding: "4px",
+                    }}
                   >
                     {playingTrackId === track.id ? "⏸" : "▶"}
                   </button>
                   <button
                     onClick={() => handleRemoveTrack(track.uri, index)}
-                    style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#ff5252", flexShrink: 0, padding: "4px 8px" }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      fontSize: "18px",
+                      cursor: "pointer",
+                      color: "#ff5252",
+                      flexShrink: 0,
+                      padding: "4px 8px",
+                    }}
                   >
                     ✕
                   </button>
@@ -1283,10 +1411,18 @@ function App() {
           )}
 
           <div className="bottom-nav">
-            <button className="nav-item" onClick={() => setNavTab("tracks")}><span className="nav-icon">◎</span>BPM</button>
-            <button className="nav-item" onClick={() => setNavTab("tracks")}><span className="nav-icon">≡</span>Tracks</button>
-            <button className="nav-item active"><span className="nav-icon">▶</span>Playing</button>
-            <button className="nav-item"><span className="nav-icon">⚙</span>Settings</button>
+            <button className="nav-item" onClick={() => setNavTab("tracks")}>
+              <span className="nav-icon">◎</span>BPM
+            </button>
+            <button className="nav-item" onClick={() => setNavTab("tracks")}>
+              <span className="nav-icon">≡</span>Tracks
+            </button>
+            <button className="nav-item active">
+              <span className="nav-icon">▶</span>Playing
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">⚙</span>Settings
+            </button>
           </div>
         </div>
       );
@@ -1297,7 +1433,16 @@ function App() {
       <div className="app">
         <div className="app-header">
           <h1>TEMPO</h1>
-          <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#aaa", fontSize: "12px", cursor: "pointer" }}>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#aaa",
+              fontSize: "12px",
+              cursor: "pointer",
+            }}
+          >
             Log out
           </button>
         </div>
@@ -1382,72 +1527,137 @@ function App() {
   // ===== 通常画面 =====
   return (
     <div className="app">
-      <div className="app-header">
-        <h1>TEMPO</h1>
-        {!token ? (
-          <div className="glass-card" style={{ textAlign: "center" }}>
-            <p className="section-label">ログイン</p>
-            <div className="genre-filter" style={{ justifyContent: "center" }}>
-              <button
-                className="genre-btn active"
-                onClick={() => {
-                  localStorage.setItem("music_service", "spotify");
-                  setMusicService("spotify");
-                  loginWithSpotify();
-                }}
-              >
-                Spotify
-              </button>{" "}
-              <button
-                className="genre-btn active"
-                onClick={async () => {
-                  try {
-                    const music = await loginWithAppleMusic();
-                    setAppleMusicInstance(music);
-                    setMusicService("apple");
-                    setToken("apple-music-authorized");
-                    localStorage.setItem("music_service", "apple");
-                  } catch (err) {
-                    console.error("Apple Music login failed:", err);
-                  }
-                }}
-                style={{ background: "#fc3c44" }}
-              >
-                Apple Music
-              </button>{" "}
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={handleLogout}
+      {/* ログイン画面 */}
+      {!token && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "100vh",
+            gap: "24px",
+            padding: "32px 16px",
+          }}
+        >
+          <h1
             style={{
-              background: "none",
-              border: "none",
-              color: "#00d672",
-              fontSize: "13px",
-              cursor: "pointer",
+              fontSize: "48px",
+              fontWeight: 700,
+              letterSpacing: "8px",
+              color: "#1a1a2e",
             }}
           >
-            ● 接続済み（ログアウト）
-          </button>
-        )}
-      </div>
+            TEMPO
+          </h1>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              width: "100%",
+              maxWidth: "280px",
+            }}
+          >
+            <button
+              className="genre-btn active"
+              style={{
+                padding: "14px",
+                fontSize: "15px",
+                borderRadius: "12px",
+              }}
+              onClick={() => {
+                localStorage.setItem("music_service", "spotify");
+                setMusicService("spotify");
+                loginWithSpotify();
+              }}
+            >
+              Login with Spotify
+            </button>
+            <button
+              className="genre-btn active"
+              style={{
+                padding: "14px",
+                fontSize: "15px",
+                borderRadius: "12px",
+                background: "#fc3c44",
+              }}
+              onClick={async () => {
+                try {
+                  const music = await loginWithAppleMusic();
+                  setAppleMusicInstance(music);
+                  setMusicService("apple");
+                  setToken("apple-music-authorized");
+                  localStorage.setItem("music_service", "apple");
+                } catch (err) {
+                  console.error("Apple Music login failed:", err);
+                }
+              }}
+            >
+              Login with Apple Music
+            </button>
+          </div>
+          <p
+            style={{
+              fontSize: "12px",
+              color: "#aaa",
+              textAlign: "center",
+              lineHeight: 1.8,
+            }}
+          >
+            ※ Access request in the app is required.
+            <br />※ アプリでのアクセスリクエストが必要です。
+          </p>
+        </div>
+      )}
 
+      {/* ログイン後のヘッダーとコンテンツ */}
       {token && (
         <>
+          <div className="app-header">
+            <h1>TEMPO</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <img
+                src={
+                  musicService === "spotify"
+                    ? "https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Primary_Logo_RGB_Green.png"
+                    : "https://www.apple.com/v/apple-music/r/images/overview/hero__dh2e2crxtbmu_small.jpg"
+                }
+                alt={musicService}
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 4,
+                  objectFit: "cover",
+                }}
+              />
+              <button
+                onClick={handleLogout}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#aaa",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                Log out
+              </button>
+            </div>
+          </div>
           <div className="glass-card">
             <div className="genre-filter">
               <button
                 className={`genre-btn ${mode === "library" ? "active" : ""}`}
                 onClick={() => setMode("library")}
               >
-                マイライブラリ
+                My Library
               </button>
               <button
                 className={`genre-btn ${mode === "search" ? "active" : ""}`}
                 onClick={() => setMode("search")}
               >
-                検索
+                Search
               </button>
             </div>
           </div>
@@ -1460,11 +1670,11 @@ function App() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="曲名やアーティスト名で検索"
+                  placeholder="Search by title or artist"
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 />
                 <button onClick={handleSearch} className="search-btn">
-                  検索
+                  Search
                 </button>
               </div>
             </div>
@@ -1480,10 +1690,17 @@ function App() {
                     style={{
                       color: "#888",
                       marginTop: "8px",
-                      fontSize: "13px",
+                      fontSize: "12px",
+                      lineHeight: 1.8,
                     }}
                   >
-                    ライブラリを読み込み中...
+                    ※ First load may take a while.
+                    <br />
+                    ※ Please use in a good network environment.
+                    <br />
+                    <span style={{ color: "#bbb", fontSize: "11px" }}>
+                      初回読み込みには時間がかかります。通信が良いところでお試しください。
+                    </span>
                   </p>
                 </div>
               ) : (
@@ -1492,7 +1709,7 @@ function App() {
                     type="text"
                     value={libraryQuery}
                     onChange={(e) => setLibraryQuery(e.target.value)}
-                    placeholder="ライブラリ内を検索"
+                    placeholder="Search in library"
                   />
                 </div>
               )}
@@ -1540,21 +1757,28 @@ function App() {
             onMinChange={setMinBpm}
             onMaxChange={setMaxBpm}
           />
+
+          {/* k/n曲取得中 表示（BPMフィルターの下） */}
+          {mode === "library" && bgTotal > 0 && (
+            <p
+              style={{
+                fontSize: "12px",
+                color: bgLoaded >= bgTotal ? "#00d672" : "#aaa",
+                marginBottom: "4px",
+                textAlign: "right",
+              }}
+            >
+              {bgLoaded >= bgTotal
+                ? `${bgLoaded}/${bgTotal} tracks loaded ✓`
+                : `${bgLoaded}/${bgTotal} tracks loading...`}
+            </p>
+          )}
+
           <p className="section-label">
             {mode === "search"
               ? filteredResults.length
               : filteredLibraryTracks.length}{" "}
             TRACKS
-            {bpmProgress.total > 0 && (
-              <span style={{ marginLeft: "8px", color: "#00d672" }}>
-                (BPM取得中 {bpmProgress.loaded}/{bpmProgress.total})
-              </span>
-            )}
-            {bpmProgress.total === 0 && backgroundTracks.length > 0 && (
-              <span style={{ marginLeft: "8px", color: "#aaa" }}>
-                (バックグラウンドで{backgroundTracks.length}曲取得済み)
-              </span>
-            )}
           </p>
           <ul className="song-list">
             {displayedTracks.map((song) => (
@@ -1593,66 +1817,76 @@ function App() {
             ))}
           </ul>
           {renderFloatingControls()}
+
+          {/* MORE: 表示済み曲の追加（50件ずつ） */}
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length && (
-              <div
-                ref={loadMoreRef}
-                style={{ textAlign: "center", margin: "16px 0" }}
-              >
-                <div className="loading-spinner" />
-              </div>
-            )}
-          {/* もっと見るボタン */}
-          {mode === "library" &&
-            (backgroundTracks.length > 0 || bgTotal > bgLoaded) && (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
-                {backgroundTracks.length > 0 ? (
-                  <button
-                    className="genre-btn"
-                    style={{ padding: "12px 32px", fontSize: "14px" }}
-                    onClick={() => {
-                      setLibraryTracks((prev) => {
-                        const existingKeys = new Set(
-                          prev.map((t) => `${t.title}|||${t.artist}`),
-                        );
-                        const newTracks = backgroundTracks.filter(
-                          (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
-                        );
-                        return [...prev, ...newTracks];
-                      });
-                      setBackgroundTracks([]);
-                    }}
-                  >
-                    もっと見る（{bgLoaded}/{bgTotal}曲取得中）
-                  </button>
-                ) : (
-                  <p style={{ color: "#aaa", fontSize: "13px" }}>
-                    取得中... {bgLoaded}/{bgTotal}曲
-                  </p>
-                )}
+                <button
+                  className="genre-btn"
+                  style={{ padding: "12px 32px", fontSize: "14px" }}
+                  onClick={() => setDisplayCount((prev) => prev + 50)}
+                >
+                  MORE (+50)
+                </button>
               </div>
             )}
+
+          {/* バックグラウンド取得済みの追加 */}
+          {mode === "library" && backgroundTracks.length > 0 && (
+            <div style={{ textAlign: "center", margin: "8px 0 16px" }}>
+              <button
+                className="genre-btn"
+                style={{ padding: "12px 32px", fontSize: "14px" }}
+                onClick={() => {
+                  const toAdd = [...backgroundTracks];
+                  setBackgroundTracks([]);
+                  setLibraryTracks((prev) => {
+                    const existingKeys = new Set(
+                      prev.map((t) => `${t.title}|||${t.artist}`),
+                    );
+                    const newTracks = toAdd.filter(
+                      (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
+                    );
+                    return [...prev, ...newTracks];
+                  });
+                }}
+              >
+                Load more ({backgroundTracks.length} tracks ready)
+              </button>
+            </div>
+          )}
+          {mode === "library" &&
+            backgroundTracks.length === 0 &&
+            bgTotal > bgLoaded && (
+              <div
+                style={{
+                  textAlign: "center",
+                  margin: "8px 0 16px",
+                  color: "#aaa",
+                  fontSize: "13px",
+                }}
+              >
+                Loading in background... {bgLoaded}/{bgTotal}
+              </div>
+            )}
+
+          <div className="bottom-nav">
+            <button className="nav-item">
+              <span className="nav-icon">◎</span>BPM
+            </button>
+            <button className="nav-item active">
+              <span className="nav-icon">≡</span>Tracks
+            </button>
+            <button className="nav-item" onClick={() => setNavTab("play")}>
+              <span className="nav-icon">▶</span>Playing
+            </button>
+            <button className="nav-item">
+              <span className="nav-icon">⚙</span>Settings
+            </button>
+          </div>
         </>
       )}
-
-      <div className="bottom-nav">
-        <button className="nav-item">
-          <span className="nav-icon">◎</span>
-          BPM
-        </button>
-        <button className="nav-item active">
-          <span className="nav-icon">≡</span>
-          Tracks
-        </button>
-        <button className="nav-item" onClick={() => setNavTab("play")}>
-          <span className="nav-icon">▶</span>
-          Playing
-        </button>
-        <button className="nav-item">
-          <span className="nav-icon">⚙</span>
-          Settings
-        </button>
-      </div>
     </div>
   );
 }
