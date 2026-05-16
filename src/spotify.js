@@ -138,14 +138,14 @@ export async function getMyPlaylists(token) {
 export async function getPlaylistTracks(playlistId, token) {
   try {
     const response = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}`,
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`,
       {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
     if (!response.ok) return [];
     const data = await response.json();
-    return data.items?.items || data.tracks?.items || [];
+    return data.items || [];
   } catch {
     return [];
   }
@@ -356,7 +356,6 @@ export async function renamePlaylist(token, playlistId, name) {
 // プレイリストから曲を削除
 export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
   const body = { tracks: trackUris.map((uri) => ({ uri })) };
-  console.log("DELETE body:", JSON.stringify(body));
   const response = await fetch(
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
     {
@@ -370,7 +369,7 @@ export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
   );
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    console.error("削除APIエラー:", response.status, err);
+    console.error("Delete API error:", response.status, err);
   }
   return response.ok;
 }
