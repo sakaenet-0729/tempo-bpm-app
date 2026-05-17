@@ -177,14 +177,12 @@ export async function getMyPlaylists(token) {
 export async function getPlaylistTracks(playlistId, token) {
   try {
     const response = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      },
+      `https://api.spotify.com/v1/playlists/${playlistId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
     );
     if (!response.ok) return [];
     const data = await response.json();
-    return data.items || [];
+    return data.tracks?.items || [];
   } catch {
     return [];
   }
@@ -360,17 +358,13 @@ export async function addTracksToPlaylist(token, playlistId, trackUris) {
 export async function getPlaylistTracksAll(playlistId, token) {
   try {
     let allItems = [];
-    let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
-    while (url) {
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) break;
-      const data = await response.json();
-      allItems = [...allItems, ...(data.items || [])];
-      url = data.next || null;
-    }
-    return allItems;
+    const response = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.tracks?.items || [];
   } catch {
     return [];
   }
