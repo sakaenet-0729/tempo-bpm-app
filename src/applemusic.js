@@ -15,9 +15,8 @@ export async function getAppleMusicToken() {
   return data.token;
 }
 
-export async function loginWithAppleMusic() {
+export async function initAppleMusic() {
   const token = await getAppleMusicToken();
-
   await MusicKit.configure({
     developerToken: token,
     app: {
@@ -25,22 +24,26 @@ export async function loginWithAppleMusic() {
       build: "1.0.0",
     },
   });
+  return MusicKit.getInstance();
+}
 
-  const music = MusicKit.getInstance();
+export async function loginWithAppleMusic() {
+  const music = await initAppleMusic();
   await music.authorize();
   return music;
 }
 
 export async function searchAppleMusic(query) {
-  const music = MusicKit.getInstance();
-  const result = await music.api.music(`/v1/catalog/jp/search`, {
-    term: query,
-    types: "songs",
-    limit: 10,
-  });
-
-  if (result.data.results?.songs?.data) {
-    return result.data.results.songs.data.map((song) => ({
+  const token = await getAppleMusicToken();
+  const response = await fetch(
+    `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=10`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  const data = await response.json();
+  if (data.results?.songs?.data) {
+    return data.results.songs.data.map((song) => ({
       id: song.id,
       title: song.attributes.name,
       artist: song.attributes.artistName,
@@ -53,20 +56,15 @@ export async function searchAppleMusic(query) {
   return [];
 }
 
-export async function getAppleMusicLibrary() {
+export async function getAppleMusicLibrary(offset = 0, limit = 20) {
   const music = MusicKit.getInstance();
-  let allTracks = [];
-  let offset = 0;
-  const limit = 100;
-
-  while (true) {
-    try {
-      const result = await music.api.music(
-        `/v1/me/library/songs?limit=${limit}&offset=${offset}`,
-      );
-
-      if (result.data.data && result.data.data.length > 0) {
-        const tracks = result.data.data.map((song) => ({
+  try {
+    const result = await music.api.music(
+      `/v1/me/library/songs?limit=${limit}&offset=${offset}`
+    );
+    if (result.data.data && result.data.data.length > 0) {
+      return {
+        tracks: result.data.data.map((song) => ({
           id: song.id,
           title: song.attributes.name,
           artist: song.attributes.artistName,
@@ -74,25 +72,37 @@ export async function getAppleMusicLibrary() {
           image: song.attributes.artwork?.url
             ?.replace("{w}", "64")
             ?.replace("{h}", "64"),
-        }));
-        allTracks = [...allTracks, ...tracks];
-        offset += limit;
-
-        if (result.data.data.length < limit) break;
-      } else {
-        break;
-      }
-    } catch (err) {
-      // 403やその他エラーが来たら取得済み分で終了
-      console.warn(
-        `Apple Music library fetch stopped at offset ${offset}:`,
-        err?.message || err,
-      );
-      break;
+        })),
+        hasMore: result.data.data.length === limit,
+      };
     }
+  } catch (err) {
+    console.warn("Apple Music library error:", err);
   }
+  return { tracks: [], hasMore: false };
+}
 
-  return allTracks;
+export async function getAppleMusicRecentlyPlayed() {
+  try {
+    const music = MusicKit.getInstance();
+    const result = await music.api.music(
+      "/v1/me/recent/played/tracks?limit=20"
+    );
+    if (result.data.data) {
+      return result.data.data.map((song) => ({
+        id: song.id,
+        title: song.attributes.name,
+        artist: song.attributes.artistName,
+        bpm: null,
+        image: song.attributes.artwork?.url
+          ?.replace("{w}", "64")
+          ?.replace("{h}", "64"),
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export async function playAppleMusicTrack(songId) {
@@ -129,30 +139,65 @@ export async function createAppleMusicPlaylist(name, trackIds) {
           },
         }),
       },
-    },
+    }
   );
   return response;
 }
-export async function getAppleMusicRecentlyPlayed() {
+
+export async function removeFromAppleMusicPlaylist(playlistId, trackIds) {
+  const music = MusicKit.getInstance();
   try {
-    const music = MusicKit.getInstance();
-    const result = await music.api.music("/v1/me/recent/played/tracks", {
-      limit: 30,
-      types: "songs",
-    });
-    if (result.data.data) {
-      return result.data.data.map((song) => ({
-        id: song.id,
-        title: song.attributes.name,
-        artist: song.attributes.artistName,
-        bpm: null,
-        image: song.attributes.artwork?.url
-          ?.replace("{w}", "64")
-          ?.replace("{h}", "64"),
-      }));
-    }
-    return [];
-  } catch {
-    return [];
+    const result = await music.api.music(
+      `/v1/me/library/playlists/${playlistId}/tracks`
+    );
+    const currentTracks = result.data.data || [];
+    const remainingTracks = currentTracks.filter(
+      (t) => !trackIds.includes(t.id)
+    );
+
+    await music.api.music(
+      `/v1/me/library/playlists/${playlistId}/tracks`,
+      {},
+      {
+        fetchOptions: {
+          method: "PUT",
+          body: JSON.stringify({
+            data: remainingTracks.map((t) => ({
+              id: t.id,
+              type: "songs",
+            })),
+          }),
+        },
+      }
+    );
+    return true;
+  } catch (err) {
+    console.error("Remove from playlist error:", err);
+    return false;
+  }
+}
+
+export async function reorderAppleMusicPlaylist(playlistId, trackIds) {
+  const music = MusicKit.getInstance();
+  try {
+    await music.api.music(
+      `/v1/me/library/playlists/${playlistId}/tracks`,
+      {},
+      {
+        fetchOptions: {
+          method: "PUT",
+          body: JSON.stringify({
+            data: trackIds.map((id) => ({
+              id: id,
+              type: "songs",
+            })),
+          }),
+        },
+      }
+    );
+    return true;
+  } catch (err) {
+    console.error("Reorder playlist error:", err);
+    return false;
   }
 }
