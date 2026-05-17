@@ -117,13 +117,19 @@ function App() {
 
           const needsBpm = cachedData.filter((t) => t.bpm === null);
           for (let i = 0; i < needsBpm.length; i++) {
-            await new Promise((r) => setTimeout(r, 1000));
-            const bpm = await getTrackBpm(needsBpm[i].title, needsBpm[i].artist);
+            await new Promise((r) => setTimeout(r, 800));
+            const bpm = await getTrackBpm(
+              needsBpm[i].title,
+              needsBpm[i].artist,
+            );
             setLibraryTracks((prev) => {
               const updated = prev.map((s) =>
-                s.id === needsBpm[i].id ? { ...s, bpm: bpm ?? 0 } : s
+                s.id === needsBpm[i].id ? { ...s, bpm: bpm ?? 0 } : s,
               );
-              localStorage.setItem("apple_library_cache", JSON.stringify(updated));
+              localStorage.setItem(
+                "apple_library_cache",
+                JSON.stringify(updated),
+              );
               return updated;
             });
           }
@@ -132,22 +138,26 @@ function App() {
 
         setIsLibraryLoading(true);
 
-        // よく聞く曲から先に取得
+        // 1. まず最近聞いた曲を取得（最優先）
         let allTracks = [];
         try {
           const recent = await getAppleMusicRecentlyPlayed();
+          // 重複除去して先頭に配置
           allTracks = [...recent];
           setLibraryTracks(allTracks);
           setIsLibraryLoading(false);
 
-          // 最初の20件のBPMを取得
+          // 最近聞いた曲のBPMを先に取得（20件）
           for (let i = 0; i < Math.min(allTracks.length, 20); i++) {
             await new Promise((r) => setTimeout(r, 800));
-            const bpm = await getTrackBpm(allTracks[i].title, allTracks[i].artist);
+            const bpm = await getTrackBpm(
+              allTracks[i].title,
+              allTracks[i].artist,
+            );
             setLibraryTracks((prev) =>
               prev.map((s) =>
-                s.id === allTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s
-              )
+                s.id === allTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
+              ),
             );
           }
         } catch (err) {
@@ -155,15 +165,16 @@ function App() {
           setIsLibraryLoading(false);
         }
 
-        // ライブラリの残りを20件ずつ取得
+        // 2. ライブラリの残りを20件ずつ取得
         let offset = 0;
         let hasMore = true;
         while (hasMore) {
           await new Promise((r) => setTimeout(r, 1000));
           const result = await getAppleMusicLibrary(offset, 20);
           if (result.tracks.length > 0) {
+            // 既に最近聞いた曲に含まれてるものは除外
             const newTracks = result.tracks.filter(
-              (t) => !allTracks.find((a) => a.id === t.id)
+              (t) => !allTracks.find((a) => a.id === t.id),
             );
             allTracks = [...allTracks, ...newTracks];
 
@@ -179,9 +190,8 @@ function App() {
               const bpm = await getTrackBpm(track.title, track.artist);
               setLibraryTracks((prev) => {
                 const updated = prev.map((s) =>
-                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
+                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
                 );
-                localStorage.setItem("apple_library_cache", JSON.stringify(updated));
                 return updated;
               });
             }
@@ -193,11 +203,16 @@ function App() {
           }
         }
 
-        localStorage.setItem("apple_library_cache", JSON.stringify(allTracks));
+        // キャッシュ保存
+        setLibraryTracks((current) => {
+          localStorage.setItem("apple_library_cache", JSON.stringify(current));
+          return current;
+        });
         return;
       }
 
       // Spotifyの場合
+      if (musicService !== "spotify") return;
       const cached = localStorage.getItem("library_cache");
 
       if (cached) {
@@ -211,7 +226,7 @@ function App() {
           const bpm = await getTrackBpm(track.title, track.artist);
           setLibraryTracks((prev) => {
             const updated = prev.map((s) =>
-              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
+              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
             );
             localStorage.setItem("library_cache", JSON.stringify(updated));
             return updated;
@@ -243,8 +258,8 @@ function App() {
         const bpm = await getTrackBpm(topTracks[i].title, topTracks[i].artist);
         setLibraryTracks((prev) =>
           prev.map((s) =>
-            s.id === topTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s
-          )
+            s.id === topTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
+          ),
         );
       }
 
@@ -295,7 +310,7 @@ function App() {
       setLibraryTracks((current) => {
         const unique = current.filter(
           (track, index, self) =>
-            self.findIndex((t) => t.id === track.id) === index
+            self.findIndex((t) => t.id === track.id) === index,
         );
         localStorage.setItem("library_cache", JSON.stringify(unique));
 
@@ -306,7 +321,7 @@ function App() {
             const bpm = await getTrackBpm(track.title, track.artist);
             setLibraryTracks((prev) => {
               const updated = prev.map((s) =>
-                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
+                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
               );
               localStorage.setItem("library_cache", JSON.stringify(updated));
               return updated;
@@ -335,7 +350,7 @@ function App() {
           }
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
@@ -380,7 +395,7 @@ function App() {
     for (const result of results) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
-        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s))
+        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
       );
     }
   };
@@ -401,7 +416,7 @@ function App() {
         t.id !== song.id &&
         t.bpm &&
         t.bpm !== 0 &&
-        Math.abs(t.bpm - song.bpm) <= bpmRange
+        Math.abs(t.bpm - song.bpm) <= bpmRange,
     );
     setLibraryMatches(matches);
 
@@ -420,7 +435,9 @@ function App() {
     setSimilarMode("library");
     setPlayingTrackId(null);
     if (musicService === "apple") {
-      try { pauseAppleMusic(); } catch {}
+      try {
+        pauseAppleMusic();
+      } catch {}
     }
   };
 
@@ -442,7 +459,7 @@ function App() {
         const trackIds = selectedTracks.map((t) => t.id);
         await createAppleMusicPlaylist(
           playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
-          trackIds
+          trackIds,
         );
       } catch (err) {
         console.error("Apple Music playlist error:", err);
@@ -450,14 +467,14 @@ function App() {
     } else if (musicService === "spotify" && token) {
       const playlist = await createPlaylist(
         token,
-        playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`
+        playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
       );
       if (playlist.id) {
         const trackUris = [];
         for (const track of selectedTracks) {
           const results = await searchTracks(
             `${track.title} ${track.artist}`,
-            token
+            token,
           );
           if (results.length > 0) {
             trackUris.push(`spotify:track:${results[0].id}`);
@@ -512,7 +529,7 @@ function App() {
       : filteredLibraryTracks.slice(0, displayCount);
 
   const filteredSimilarTracks = similarTracks.filter(
-    (s) => similarGenre === "All" || s.genre === similarGenre
+    (s) => similarGenre === "All" || s.genre === similarGenre,
   );
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
@@ -524,13 +541,14 @@ function App() {
         e.stopPropagation();
         if (playingTrackId === song.id) {
           setPlayingTrackId(null);
-          if (musicService === "apple") {
-            try { pauseAppleMusic(); } catch {}
-          }
+          try {
+            pauseAppleMusic();
+          } catch {}
           return;
         }
         setPlayingTrackId(song.id);
-        if (musicService === "apple" || (!musicService && token !== null)) {
+        // Apple Music（ログインあり・なし両方）で再生
+        if (musicService !== "spotify") {
           try {
             await playAppleMusicTrack(song.id);
           } catch (err) {
@@ -723,7 +741,7 @@ function App() {
                       >
                         {genre}
                       </button>
-                    )
+                    ),
                   )}
                 </div>
               </div>
@@ -739,9 +757,7 @@ function App() {
                 ? libraryMatches
                 : filteredSimilarTracks
               ).map((song) => {
-                const isSelected = selectedTracks.find(
-                  (t) => t.id === song.id
-                );
+                const isSelected = selectedTracks.find((t) => t.id === song.id);
                 return (
                   <li
                     key={song.id}
