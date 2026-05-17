@@ -464,12 +464,18 @@ function App() {
   // ===== ハンドラー =====
   const handleLogout = () => {
     localStorage.removeItem("spotify_token");
+    localStorage.removeItem("spotify_token_expiry");
+    localStorage.removeItem("spotify_refresh_token");
+    localStorage.removeItem("spotify_top_ids");
     localStorage.removeItem("library_cache");
     localStorage.removeItem("apple_library_cache");
     localStorage.removeItem("music_service");
     setToken(null);
     setSearchResults([]);
     setLibraryTracks([]);
+    setBackgroundTracks([]);
+    setBgTotal(0);
+    setBgLoaded(0);
     setMusicService("spotify");
     setAppleMusicInstance(null);
   };
@@ -1527,128 +1533,72 @@ function App() {
   // ===== 通常画面 =====
   return (
     <div className="app">
-      {/* ログイン画面 */}
-      {!token && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "100vh",
-            gap: "24px",
-            padding: "32px 16px",
-          }}
-        >
-          <h1>TEMPO</h1>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-              width: "100%",
-              maxWidth: "280px",
-            }}
-          >
-            <button
-              className="genre-btn active"
-              style={{
-                padding: "14px",
-                fontSize: "15px",
-                borderRadius: "12px",
-              }}
-              onClick={() => {
-                localStorage.setItem("music_service", "spotify");
-                setMusicService("spotify");
-                loginWithSpotify();
-              }}
-            >
-              Login with Spotify
-            </button>
-            <button
-              className="genre-btn active"
-              style={{
-                padding: "14px",
-                fontSize: "15px",
-                borderRadius: "12px",
-                background: "#fc3c44",
-              }}
-              onClick={async () => {
-                try {
-                  const music = await loginWithAppleMusic();
-                  setAppleMusicInstance(music);
-                  setMusicService("apple");
-                  setToken("apple-music-authorized");
-                  localStorage.setItem("music_service", "apple");
-                } catch (err) {
-                  console.error("Apple Music login failed:", err);
-                }
-              }}
-            >
-              Login with Apple Music
-            </button>
-          </div>
-          <p
-            style={{
-              fontSize: "12px",
-              color: "#aaa",
-              textAlign: "center",
-              lineHeight: 1.8,
-            }}
-          >
-            ※ Access request in the app is required.
-            <br />※ アプリでのアクセスリクエストが必要です。
-          </p>
-        </div>
-      )}
-
-      {/* ログイン後のヘッダーとコンテンツ */}
-      {token && (
-        <>
-          <div className="app-header">
-            <h1>TEMPO</h1>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <img
-                src={
-                  musicService === "spotify"
-                    ? "https://storage.googleapis.com/pr-newsroom-wp/1/2023/05/Spotify_Primary_Logo_RGB_Green.png"
-                    : "https://www.apple.com/v/apple-music/r/images/overview/hero__dh2e2crxtbmu_small.jpg"
-                }
-                alt={musicService}
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 4,
-                  objectFit: "cover",
-                }}
-              />
+      <div className="app-header">
+        <h1>TEMPO</h1>
+        {!token ? (
+          <div className="glass-card" style={{ textAlign: "center" }}>
+            <p className="section-label">ログイン</p>
+            <div className="genre-filter" style={{ justifyContent: "center" }}>
               <button
-                onClick={handleLogout}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#aaa",
-                  fontSize: "12px",
-                  cursor: "pointer",
+                className="genre-btn active"
+                onClick={() => {
+                  localStorage.setItem("music_service", "spotify");
+                  setMusicService("spotify");
+                  loginWithSpotify();
                 }}
               >
-                Log out
-              </button>
+                Spotify
+              </button>{" "}
+              <button
+                className="genre-btn active"
+                onClick={async () => {
+                  try {
+                    const music = await loginWithAppleMusic();
+                    setAppleMusicInstance(music);
+                    setMusicService("apple");
+                    setToken("apple-music-authorized");
+                    localStorage.setItem("music_service", "apple");
+                  } catch (err) {
+                    console.error("Apple Music login failed:", err);
+                  }
+                }}
+                style={{ background: "#fc3c44" }}
+              >
+                Apple Music
+              </button>{" "}
             </div>
           </div>
+        ) : (
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#00d672",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            ● 接続済み（ログアウト）
+          </button>
+        )}
+      </div>
+
+      {token && (
+        <>
           <div className="glass-card">
             <div className="genre-filter">
               <button
                 className={`genre-btn ${mode === "library" ? "active" : ""}`}
                 onClick={() => setMode("library")}
               >
-                My Library
+                マイライブラリ
               </button>
               <button
                 className={`genre-btn ${mode === "search" ? "active" : ""}`}
                 onClick={() => setMode("search")}
               >
-                Search
+                検索
               </button>
             </div>
           </div>
@@ -1661,11 +1611,11 @@ function App() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by title or artist"
+                  placeholder="曲名やアーティスト名で検索"
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 />
                 <button onClick={handleSearch} className="search-btn">
-                  Search
+                  検索
                 </button>
               </div>
             </div>
@@ -1681,17 +1631,10 @@ function App() {
                     style={{
                       color: "#888",
                       marginTop: "8px",
-                      fontSize: "12px",
-                      lineHeight: 1.8,
+                      fontSize: "13px",
                     }}
                   >
-                    ※ First load may take a while.
-                    <br />
-                    ※ Please use in a good network environment.
-                    <br />
-                    <span style={{ color: "#bbb", fontSize: "11px" }}>
-                      初回読み込みには時間がかかります。通信が良いところでお試しください。
-                    </span>
+                    ライブラリを読み込み中...
                   </p>
                 </div>
               ) : (
@@ -1700,7 +1643,7 @@ function App() {
                     type="text"
                     value={libraryQuery}
                     onChange={(e) => setLibraryQuery(e.target.value)}
-                    placeholder="Search in library"
+                    placeholder="ライブラリ内を検索"
                   />
                 </div>
               )}
@@ -1748,28 +1691,21 @@ function App() {
             onMinChange={setMinBpm}
             onMaxChange={setMaxBpm}
           />
-
-          {/* k/n曲取得中 表示（BPMフィルターの下） */}
-          {mode === "library" && bgTotal > 0 && (
-            <p
-              style={{
-                fontSize: "12px",
-                color: bgLoaded >= bgTotal ? "#00d672" : "#aaa",
-                marginBottom: "4px",
-                textAlign: "right",
-              }}
-            >
-              {bgLoaded >= bgTotal
-                ? `${bgLoaded}/${bgTotal} tracks loaded ✓`
-                : `${bgLoaded}/${bgTotal} tracks loading...`}
-            </p>
-          )}
-
           <p className="section-label">
             {mode === "search"
               ? filteredResults.length
               : filteredLibraryTracks.length}{" "}
             TRACKS
+            {bpmProgress.total > 0 && (
+              <span style={{ marginLeft: "8px", color: "#00d672" }}>
+                (BPM取得中 {bpmProgress.loaded}/{bpmProgress.total})
+              </span>
+            )}
+            {bpmProgress.total === 0 && backgroundTracks.length > 0 && (
+              <span style={{ marginLeft: "8px", color: "#aaa" }}>
+                (バックグラウンドで{backgroundTracks.length}曲取得済み)
+              </span>
+            )}
           </p>
           <ul className="song-list">
             {displayedTracks.map((song) => (
@@ -1808,76 +1744,66 @@ function App() {
             ))}
           </ul>
           {renderFloatingControls()}
-
-          {/* MORE: 表示済み曲の追加（50件ずつ） */}
           {mode === "library" &&
             displayCount < filteredLibraryTracks.length && (
-              <div style={{ textAlign: "center", margin: "16px 0" }}>
-                <button
-                  className="genre-btn"
-                  style={{ padding: "12px 32px", fontSize: "14px" }}
-                  onClick={() => setDisplayCount((prev) => prev + 50)}
-                >
-                  MORE (+50)
-                </button>
-              </div>
-            )}
-
-          {/* バックグラウンド取得済みの追加 */}
-          {mode === "library" && backgroundTracks.length > 0 && (
-            <div style={{ textAlign: "center", margin: "8px 0 16px" }}>
-              <button
-                className="genre-btn"
-                style={{ padding: "12px 32px", fontSize: "14px" }}
-                onClick={() => {
-                  const toAdd = [...backgroundTracks];
-                  setBackgroundTracks([]);
-                  setLibraryTracks((prev) => {
-                    const existingKeys = new Set(
-                      prev.map((t) => `${t.title}|||${t.artist}`),
-                    );
-                    const newTracks = toAdd.filter(
-                      (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
-                    );
-                    return [...prev, ...newTracks];
-                  });
-                }}
-              >
-                Load more ({backgroundTracks.length} tracks ready)
-              </button>
-            </div>
-          )}
-          {mode === "library" &&
-            backgroundTracks.length === 0 &&
-            bgTotal > bgLoaded && (
               <div
-                style={{
-                  textAlign: "center",
-                  margin: "8px 0 16px",
-                  color: "#aaa",
-                  fontSize: "13px",
-                }}
+                ref={loadMoreRef}
+                style={{ textAlign: "center", margin: "16px 0" }}
               >
-                Loading in background... {bgLoaded}/{bgTotal}
+                <div className="loading-spinner" />
               </div>
             )}
-
-          <div className="bottom-nav">
-            <button className="nav-item">
-              <span className="nav-icon">◎</span>BPM
-            </button>
-            <button className="nav-item active">
-              <span className="nav-icon">≡</span>Tracks
-            </button>
-            <button className="nav-item" onClick={() => setNavTab("play")}>
-              <span className="nav-icon">▶</span>Playing
-            </button>
-            <button className="nav-item">
-              <span className="nav-icon">⚙</span>Settings
-            </button>
-          </div>
+          {/* もっと見るボタン */}
+          {mode === "library" &&
+            (backgroundTracks.length > 0 || bgTotal > bgLoaded) && (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                {backgroundTracks.length > 0 ? (
+                  <button
+                    className="genre-btn"
+                    style={{ padding: "12px 32px", fontSize: "14px" }}
+                    onClick={() => {
+                      setLibraryTracks((prev) => {
+                        const existingKeys = new Set(
+                          prev.map((t) => `${t.title}|||${t.artist}`),
+                        );
+                        const newTracks = backgroundTracks.filter(
+                          (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
+                        );
+                        return [...prev, ...newTracks];
+                      });
+                      setBackgroundTracks([]);
+                    }}
+                  >
+                    もっと見る（{bgLoaded}/{bgTotal}曲取得中）
+                  </button>
+                ) : (
+                  <p style={{ color: "#aaa", fontSize: "13px" }}>
+                    取得中... {bgLoaded}/{bgTotal}曲
+                  </p>
+                )}
+              </div>
+            )}
         </>
       )}
+
+      <div className="bottom-nav">
+        <button className="nav-item">
+          <span className="nav-icon">◎</span>
+          BPM
+        </button>
+        <button className="nav-item active">
+          <span className="nav-icon">≡</span>
+          Tracks
+        </button>
+        <button className="nav-item" onClick={() => setNavTab("play")}>
+          <span className="nav-icon">▶</span>
+          Playing
+        </button>
+        <button className="nav-item">
+          <span className="nav-icon">⚙</span>
+          Settings
+        </button>
+      </div>
     </div>
   );
 }

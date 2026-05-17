@@ -62,23 +62,55 @@ export async function loginWithSpotify() {
 
 export async function getAccessToken() {
   const savedToken = localStorage.getItem("spotify_token");
-  if (savedToken) return savedToken;
+  const tokenExpiry = localStorage.getItem("spotify_token_expiry");
+
+  // トークンが有効期限内なら再利用
+  if (savedToken && tokenExpiry && Date.now() < Number(tokenExpiry)) {
+    return savedToken;
+  }
+
+  // リフレッシュトークンがあれば自動更新
+  const refreshToken = localStorage.getItem("spotify_refresh_token");
+  if (refreshToken) {
+    try {
+      const response = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: CLIENT_ID,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+        }),
+      });
+      const data = await response.json();
+      if (data.access_token) {
+        localStorage.setItem("spotify_token", data.access_token);
+        localStorage.setItem(
+          "spotify_token_expiry",
+          String(Date.now() + (data.expires_in - 60) * 1000),
+        );
+        if (data.refresh_token) {
+          localStorage.setItem("spotify_refresh_token", data.refresh_token);
+        }
+        return data.access_token;
+      }
+    } catch {
+      // リフレッシュ失敗時は通常フローへ
+    }
+  }
 
   const urlParams = new URLSearchParams(window.location.search);
   const code = urlParams.get("code");
 
   if (!code) return null;
 
-  // codeを使ったらURLからすぐ消す（2回使えないから）
   window.history.replaceState({}, document.title, "/");
 
   const codeVerifier = localStorage.getItem("code_verifier");
 
   const response = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
       grant_type: "authorization_code",
@@ -92,6 +124,13 @@ export async function getAccessToken() {
 
   if (data.access_token) {
     localStorage.setItem("spotify_token", data.access_token);
+    localStorage.setItem(
+      "spotify_token_expiry",
+      String(Date.now() + (data.expires_in - 60) * 1000),
+    );
+    if (data.refresh_token) {
+      localStorage.setItem("spotify_refresh_token", data.refresh_token);
+    }
     return data.access_token;
   }
 
