@@ -11,8 +11,7 @@ const REDIRECT_URI =
 // 「このアプリがアクセスしたい範囲」を指定
 // 今はユーザーの基本情報だけ。曲検索は指定なしでもできる
 const SCOPES =
-  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private";
-
+  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
 function generateRandomString(length) {
   // ランダムな文字列を作る
   // なぜ必要？→ 通信の途中で誰かになりすまされないようにする鍵
@@ -85,7 +84,10 @@ export async function getAccessToken() {
       const data = await response.json();
       if (data.access_token) {
         localStorage.setItem("spotify_token", data.access_token);
-        localStorage.setItem("spotify_token_expiry", String(Date.now() + (data.expires_in - 60) * 1000));
+        localStorage.setItem(
+          "spotify_token_expiry",
+          String(Date.now() + (data.expires_in - 60) * 1000),
+        );
         if (data.refresh_token) {
           localStorage.setItem("spotify_refresh_token", data.refresh_token);
         }
@@ -121,7 +123,10 @@ export async function getAccessToken() {
 
   if (data.access_token) {
     localStorage.setItem("spotify_token", data.access_token);
-    localStorage.setItem("spotify_token_expiry", String(Date.now() + (data.expires_in - 60) * 1000));
+    localStorage.setItem(
+      "spotify_token_expiry",
+      String(Date.now() + (data.expires_in - 60) * 1000),
+    );
     if (data.refresh_token) {
       localStorage.setItem("spotify_refresh_token", data.refresh_token);
     }
