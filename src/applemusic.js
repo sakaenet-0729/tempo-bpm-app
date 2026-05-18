@@ -60,7 +60,7 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
   const music = MusicKit.getInstance();
   try {
     const result = await music.api.music(
-      `/v1/me/library/songs?limit=${limit}&offset=${offset}`
+      `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`
     );
     if (result.data.data && result.data.data.length > 0) {
       return {
@@ -144,6 +144,51 @@ export async function createAppleMusicPlaylist(name, trackIds) {
   return response;
 }
 
+export async function getAppleMusicPlaylistTracks(playlistId) {
+  const music = MusicKit.getInstance();
+  try {
+    const result = await music.api.music(
+      `/v1/me/library/playlists/${playlistId}/tracks`
+    );
+    if (result.data.data) {
+      return result.data.data.map((song) => ({
+        id: song.id,
+        title: song.attributes.name,
+        artist: song.attributes.artistName,
+        image: song.attributes.artwork?.url
+          ?.replace("{w}", "64")
+          ?.replace("{h}", "64"),
+      }));
+    }
+    return [];
+  } catch (err) {
+    console.error("Get playlist tracks error:", err);
+    return [];
+  }
+}
+
+export async function getMyAppleMusicPlaylists() {
+  const music = MusicKit.getInstance();
+  try {
+    const result = await music.api.music(
+      "/v1/me/library/playlists?limit=50"
+    );
+    if (result.data.data) {
+      return result.data.data
+        .filter((pl) => (pl.attributes.description || "").includes("Created by TEMPO"))
+        .map((pl) => ({
+          id: pl.id,
+          name: pl.attributes.name,
+          description: pl.attributes.description || "",
+        }));
+    }
+    return [];
+  } catch (err) {
+    console.error("Get playlists error:", err);
+    return [];
+  }
+}
+
 export async function removeFromAppleMusicPlaylist(playlistId, trackIds) {
   const music = MusicKit.getInstance();
   try {
@@ -198,6 +243,30 @@ export async function reorderAppleMusicPlaylist(playlistId, trackIds) {
     return true;
   } catch (err) {
     console.error("Reorder playlist error:", err);
+    return false;
+  }
+}
+
+export async function renameAppleMusicPlaylist(playlistId, name) {
+  const music = MusicKit.getInstance();
+  try {
+    await music.api.music(
+      `/v1/me/library/playlists/${playlistId}`,
+      {},
+      {
+        fetchOptions: {
+          method: "PATCH",
+          body: JSON.stringify({
+            attributes: {
+              name: name,
+            },
+          }),
+        },
+      }
+    );
+    return true;
+  } catch (err) {
+    console.error("Rename playlist error:", err);
     return false;
   }
 }

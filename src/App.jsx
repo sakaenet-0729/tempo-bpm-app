@@ -24,6 +24,11 @@ import {
   playAppleMusicTrack,
   pauseAppleMusic,
   createAppleMusicPlaylist,
+  getMyAppleMusicPlaylists,
+  getAppleMusicPlaylistTracks,
+  removeFromAppleMusicPlaylist,
+  reorderAppleMusicPlaylist,
+  renameAppleMusicPlaylist,
 } from "./applemusic";
 
 function App() {
@@ -53,9 +58,15 @@ function App() {
   const [playingTrackId, setPlayingTrackId] = useState(null);
   const [musicService, setMusicService] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [libraryOffset, setLibraryOffset] = useState(0);
-  const [libraryHasMore, setLibraryHasMore] = useState(true);
   const loadMoreRef = useRef(null);
+
+  // Playing tab states
+  const [activeTab, setActiveTab] = useState("tracks");
+  const [myPlaylists, setMyPlaylists] = useState([]);
+  const [editingPlaylist, setEditingPlaylist] = useState(null);
+  const [editingTracks, setEditingTracks] = useState([]);
+  const [editingName, setEditingName] = useState("");
+  const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
 
   // ===== 初期化 =====
   useEffect(() => {
@@ -69,7 +80,6 @@ function App() {
           setToken("apple-music-authorized");
         } catch (err) {
           console.error("Apple Music auto-login failed:", err);
-          // ログイン失敗してもApple Music検索は使える
         }
         setIsInitializing(false);
         return;
@@ -91,7 +101,6 @@ function App() {
         return;
       }
 
-      // 初回アクセス: Apple Music検索だけ使えるようにする
       try {
         await initAppleMusic();
       } catch (err) {
@@ -102,7 +111,7 @@ function App() {
     init();
   }, []);
 
-  // ===== ライブラリ取得（ログイン時のみ） =====
+  // ===== ライブラリ取得 =====
   useEffect(() => {
     async function fetchLibrary() {
       if (!token || !musicService) return;
@@ -118,18 +127,12 @@ function App() {
           const needsBpm = cachedData.filter((t) => t.bpm === null);
           for (let i = 0; i < needsBpm.length; i++) {
             await new Promise((r) => setTimeout(r, 800));
-            const bpm = await getTrackBpm(
-              needsBpm[i].title,
-              needsBpm[i].artist,
-            );
+            const bpm = await getTrackBpm(needsBpm[i].title, needsBpm[i].artist);
             setLibraryTracks((prev) => {
               const updated = prev.map((s) =>
-                s.id === needsBpm[i].id ? { ...s, bpm: bpm ?? 0 } : s,
+                s.id === needsBpm[i].id ? { ...s, bpm: bpm ?? 0 } : s
               );
-              localStorage.setItem(
-                "apple_library_cache",
-                JSON.stringify(updated),
-              );
+              localStorage.setItem("apple_library_cache", JSON.stringify(updated));
               return updated;
             });
           }
@@ -138,26 +141,21 @@ function App() {
 
         setIsLibraryLoading(true);
 
-        // 1. まず最近聞いた曲を取得（最優先）
+        // 最近聞いた曲を最優先
         let allTracks = [];
         try {
           const recent = await getAppleMusicRecentlyPlayed();
-          // 重複除去して先頭に配置
           allTracks = [...recent];
           setLibraryTracks(allTracks);
           setIsLibraryLoading(false);
 
-          // 最近聞いた曲のBPMを先に取得（20件）
           for (let i = 0; i < Math.min(allTracks.length, 20); i++) {
             await new Promise((r) => setTimeout(r, 800));
-            const bpm = await getTrackBpm(
-              allTracks[i].title,
-              allTracks[i].artist,
-            );
+            const bpm = await getTrackBpm(allTracks[i].title, allTracks[i].artist);
             setLibraryTracks((prev) =>
               prev.map((s) =>
-                s.id === allTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
-              ),
+                s.id === allTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s
+              )
             );
           }
         } catch (err) {
@@ -165,16 +163,15 @@ function App() {
           setIsLibraryLoading(false);
         }
 
-        // 2. ライブラリの残りを20件ずつ取得
+        // ライブラリの残りを20件ずつ（最近追加順）
         let offset = 0;
         let hasMore = true;
         while (hasMore) {
           await new Promise((r) => setTimeout(r, 1000));
           const result = await getAppleMusicLibrary(offset, 20);
           if (result.tracks.length > 0) {
-            // 既に最近聞いた曲に含まれてるものは除外
             const newTracks = result.tracks.filter(
-              (t) => !allTracks.find((a) => a.id === t.id),
+              (t) => !allTracks.find((a) => a.id === t.id)
             );
             allTracks = [...allTracks, ...newTracks];
 
@@ -184,13 +181,12 @@ function App() {
               return [...prev, ...toAdd];
             });
 
-            // 新しく追加した曲のBPMを取得
             for (const track of newTracks) {
               await new Promise((r) => setTimeout(r, 800));
               const bpm = await getTrackBpm(track.title, track.artist);
               setLibraryTracks((prev) => {
                 const updated = prev.map((s) =>
-                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
                 );
                 return updated;
               });
@@ -203,7 +199,6 @@ function App() {
           }
         }
 
-        // キャッシュ保存
         setLibraryTracks((current) => {
           localStorage.setItem("apple_library_cache", JSON.stringify(current));
           return current;
@@ -213,8 +208,8 @@ function App() {
 
       // Spotifyの場合
       if (musicService !== "spotify") return;
-      const cached = localStorage.getItem("library_cache");
 
+      const cached = localStorage.getItem("library_cache");
       if (cached) {
         const cachedData = JSON.parse(cached);
         setLibraryTracks(cachedData);
@@ -226,7 +221,7 @@ function App() {
           const bpm = await getTrackBpm(track.title, track.artist);
           setLibraryTracks((prev) => {
             const updated = prev.map((s) =>
-              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
             );
             localStorage.setItem("library_cache", JSON.stringify(updated));
             return updated;
@@ -237,7 +232,6 @@ function App() {
 
       setIsLibraryLoading(true);
 
-      // よく聞く曲を先に取得
       const topData = await getMyTopTracks(token, 0);
       const topTracks = topData.items
         .filter((item) => item)
@@ -252,18 +246,16 @@ function App() {
       setLibraryTracks(topTracks);
       setIsLibraryLoading(false);
 
-      // BPM取得（20件ずつ）
       for (let i = 0; i < Math.min(topTracks.length, 20); i++) {
         await new Promise((r) => setTimeout(r, 1000));
         const bpm = await getTrackBpm(topTracks[i].title, topTracks[i].artist);
         setLibraryTracks((prev) =>
           prev.map((s) =>
-            s.id === topTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
-          ),
+            s.id === topTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s
+          )
         );
       }
 
-      // いいねした曲
       const likedData = await getMyTracks(token);
       const likedTracks = likedData.items
         .filter((item) => item.track)
@@ -277,11 +269,9 @@ function App() {
 
       setLibraryTracks((prev) => {
         const existingIds = new Set(prev.map((t) => t.id));
-        const newTracks = likedTracks.filter((t) => !existingIds.has(t.id));
-        return [...prev, ...newTracks];
+        return [...prev, ...likedTracks.filter((t) => !existingIds.has(t.id))];
       });
 
-      // プレイリストの曲
       const playlists = await getMyPlaylists(token);
       for (const pl of playlists) {
         await new Promise((r) => setTimeout(r, 2000));
@@ -301,16 +291,14 @@ function App() {
 
         setLibraryTracks((prev) => {
           const existingIds = new Set(prev.map((t) => t.id));
-          const newTracks = tracks.filter((t) => !existingIds.has(t.id));
-          return [...prev, ...newTracks];
+          return [...prev, ...tracks.filter((t) => !existingIds.has(t.id))];
         });
       }
 
-      // キャッシュ保存＋残りBPM取得
       setLibraryTracks((current) => {
         const unique = current.filter(
           (track, index, self) =>
-            self.findIndex((t) => t.id === track.id) === index,
+            self.findIndex((t) => t.id === track.id) === index
         );
         localStorage.setItem("library_cache", JSON.stringify(unique));
 
@@ -321,7 +309,7 @@ function App() {
             const bpm = await getTrackBpm(track.title, track.artist);
             setLibraryTracks((prev) => {
               const updated = prev.map((s) =>
-                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
+                s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
               );
               localStorage.setItem("library_cache", JSON.stringify(updated));
               return updated;
@@ -340,17 +328,15 @@ function App() {
     if (!loadMoreRef.current) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !isLoadingMore) {
-          if (mode === "library") {
-            setIsLoadingMore(true);
-            setTimeout(() => {
-              setDisplayCount((prev) => prev + 50);
-              setIsLoadingMore(false);
-            }, 800);
-          }
+        if (entries[0].isIntersecting && !isLoadingMore && mode === "library") {
+          setIsLoadingMore(true);
+          setTimeout(() => {
+            setDisplayCount((prev) => prev + 50);
+            setIsLoadingMore(false);
+          }, 800);
         }
       },
-      { threshold: 0.1 },
+      { threshold: 0.1 }
     );
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
@@ -367,6 +353,7 @@ function App() {
     setLibraryTracks([]);
     setMusicService(null);
     setPlayingTrackId(null);
+    setActiveTab("tracks");
   };
 
   const handleSearch = async () => {
@@ -375,7 +362,6 @@ function App() {
     setPlayingTrackId(null);
 
     let results = [];
-
     if (musicService === "spotify" && token) {
       const tracks = await searchTracks(searchQuery, token);
       results = tracks.map((track) => ({
@@ -395,7 +381,7 @@ function App() {
     for (const result of results) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
-        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
+        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s))
       );
     }
   };
@@ -410,13 +396,12 @@ function App() {
     setSimilarMode("library");
     setPlayingTrackId(null);
 
-    const bpmRange = 10;
     const matches = libraryTracks.filter(
       (t) =>
         t.id !== song.id &&
         t.bpm &&
         t.bpm !== 0 &&
-        Math.abs(t.bpm - song.bpm) <= bpmRange,
+        Math.abs(t.bpm - song.bpm) <= 10
     );
     setLibraryMatches(matches);
 
@@ -434,11 +419,7 @@ function App() {
     setPlaylistCreated(false);
     setSimilarMode("library");
     setPlayingTrackId(null);
-    if (musicService === "apple") {
-      try {
-        pauseAppleMusic();
-      } catch {}
-    }
+    try { pauseAppleMusic(); } catch {}
   };
 
   const toggleTrackSelect = (song) => {
@@ -456,10 +437,9 @@ function App() {
 
     if (musicService === "apple") {
       try {
-        const trackIds = selectedTracks.map((t) => t.id);
         await createAppleMusicPlaylist(
           playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
-          trackIds,
+          selectedTracks.map((t) => t.id)
         );
       } catch (err) {
         console.error("Apple Music playlist error:", err);
@@ -467,28 +447,84 @@ function App() {
     } else if (musicService === "spotify" && token) {
       const playlist = await createPlaylist(
         token,
-        playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
+        playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`
       );
       if (playlist.id) {
         const trackUris = [];
         for (const track of selectedTracks) {
-          const results = await searchTracks(
-            `${track.title} ${track.artist}`,
-            token,
-          );
-          if (results.length > 0) {
-            trackUris.push(`spotify:track:${results[0].id}`);
-          }
+          const results = await searchTracks(`${track.title} ${track.artist}`, token);
+          if (results.length > 0) trackUris.push(`spotify:track:${results[0].id}`);
         }
-        if (trackUris.length > 0) {
-          await addTracksToPlaylist(token, playlist.id, trackUris);
-        }
+        if (trackUris.length > 0) await addTracksToPlaylist(token, playlist.id, trackUris);
       }
     }
 
     setIsCreatingPlaylist(false);
     setPlaylistCreated(true);
     setTimeout(() => setPlaylistCreated(false), 3000);
+  };
+
+  // ===== Playing tab handlers =====
+  const loadMyPlaylists = async () => {
+    setIsPlaylistLoading(true);
+    if (musicService === "apple") {
+      const playlists = await getMyAppleMusicPlaylists();
+      setMyPlaylists(playlists);
+    }
+    setIsPlaylistLoading(false);
+  };
+
+  const handleEditPlaylist = async (playlist) => {
+    setEditingPlaylist(playlist);
+    setEditingName(playlist.name);
+    setIsPlaylistLoading(true);
+    if (musicService === "apple") {
+      const tracks = await getAppleMusicPlaylistTracks(playlist.id);
+      setEditingTracks(tracks);
+    }
+    setIsPlaylistLoading(false);
+  };
+
+  const handleRemoveTrack = async (trackId) => {
+    if (!editingPlaylist) return;
+    if (musicService === "apple") {
+      const success = await removeFromAppleMusicPlaylist(editingPlaylist.id, [trackId]);
+      if (success) {
+        setEditingTracks((prev) => prev.filter((t) => t.id !== trackId));
+      }
+    }
+  };
+
+  const handleMoveTrack = async (index, direction) => {
+    if (!editingPlaylist) return;
+    const newTracks = [...editingTracks];
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= newTracks.length) return;
+
+    [newTracks[index], newTracks[newIndex]] = [newTracks[newIndex], newTracks[index]];
+    setEditingTracks(newTracks);
+
+    if (musicService === "apple") {
+      await reorderAppleMusicPlaylist(
+        editingPlaylist.id,
+        newTracks.map((t) => t.id)
+      );
+    }
+  };
+
+  const handleRenamePlaylist = async () => {
+    if (!editingPlaylist || !editingName) return;
+    if (musicService === "apple") {
+      const success = await renameAppleMusicPlaylist(editingPlaylist.id, editingName);
+      if (success) {
+        setMyPlaylists((prev) =>
+          prev.map((p) =>
+            p.id === editingPlaylist.id ? { ...p, name: editingName } : p
+          )
+        );
+        setEditingPlaylist((prev) => ({ ...prev, name: editingName }));
+      }
+    }
   };
 
   // ===== フィルタリング =====
@@ -524,12 +560,10 @@ function App() {
     });
 
   const displayedTracks =
-    mode === "search"
-      ? filteredResults
-      : filteredLibraryTracks.slice(0, displayCount);
+    mode === "search" ? filteredResults : filteredLibraryTracks.slice(0, displayCount);
 
   const filteredSimilarTracks = similarTracks.filter(
-    (s) => similarGenre === "All" || s.genre === similarGenre,
+    (s) => similarGenre === "All" || s.genre === similarGenre
   );
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
@@ -541,17 +575,12 @@ function App() {
         e.stopPropagation();
         if (playingTrackId === song.id) {
           setPlayingTrackId(null);
-          try {
-            pauseAppleMusic();
-          } catch {}
+          try { pauseAppleMusic(); } catch {}
           return;
         }
         setPlayingTrackId(song.id);
-        // Apple Music（ログインあり・なし両方）で再生
         if (musicService !== "spotify") {
-          try {
-            await playAppleMusicTrack(song.id);
-          } catch (err) {
+          try { await playAppleMusicTrack(song.id); } catch (err) {
             console.error("Play error:", err);
           }
         }
@@ -570,11 +599,10 @@ function App() {
     </button>
   );
 
-  // ===== フローティングコントロール =====
+  // ===== フローティング =====
   const renderFloatingControls = () => {
     const hasEmbed = musicService === "spotify" && playingTrackId;
     const hasPlaylist = selectedTracks.length > 0 && token;
-
     if (!hasEmbed && !hasPlaylist) return null;
 
     return (
@@ -588,7 +616,6 @@ function App() {
             />
           </div>
         )}
-
         {hasPlaylist && (
           <div className="floating-playlist">
             <div className="search-box" style={{ marginBottom: "8px" }}>
@@ -603,18 +630,10 @@ function App() {
             <button
               onClick={handleCreatePlaylist}
               className="genre-btn active"
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "12px",
-                fontSize: "15px",
-                borderRadius: "10px",
-              }}
+              style={{ display: "block", width: "100%", padding: "12px", fontSize: "15px", borderRadius: "10px" }}
               disabled={isCreatingPlaylist}
             >
-              {isCreatingPlaylist
-                ? "作成中..."
-                : `${selectedTracks.length}曲でプレイリスト作成`}
+              {isCreatingPlaylist ? "作成中..." : `${selectedTracks.length}曲でプレイリスト作成`}
             </button>
           </div>
         )}
@@ -624,32 +643,10 @@ function App() {
 
   const renderPlaylistMessage = () => {
     if (!playlistCreated) return null;
-    const name =
-      musicService === "apple"
-        ? "Apple Music"
-        : musicService === "spotify"
-          ? "Spotify"
-          : "";
+    const name = musicService === "apple" ? "Apple Music" : musicService === "spotify" ? "Spotify" : "";
     return (
-      <div
-        style={{
-          position: "fixed",
-          bottom: "120px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 20,
-        }}
-      >
-        <p
-          style={{
-            color: "#00d672",
-            fontSize: "14px",
-            background: "rgba(255,255,255,0.9)",
-            padding: "8px 16px",
-            borderRadius: "8px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-          }}
-        >
+      <div style={{ position: "fixed", bottom: "120px", left: "50%", transform: "translateX(-50%)", zIndex: 20 }}>
+        <p style={{ color: "#00d672", fontSize: "14px", background: "rgba(255,255,255,0.9)", padding: "8px 16px", borderRadius: "8px", boxShadow: "0 2px 10px rgba(0,0,0,0.1)" }}>
           ✓ {name}にプレイリストを作成しました！
         </p>
       </div>
@@ -661,9 +658,146 @@ function App() {
     return (
       <div className="app" style={{ textAlign: "center", paddingTop: "40vh" }}>
         <div className="loading-spinner" />
-        <p className="section-label" style={{ marginTop: "12px" }}>
-          TEMPO
-        </p>
+        <p className="section-label" style={{ marginTop: "12px" }}>TEMPO</p>
+      </div>
+    );
+  }
+
+  // ===== Playing画面（プレイリスト管理） =====
+  if (activeTab === "playing" && token) {
+    return (
+      <div className="app">
+        <div className="app-header">
+          <h1>TEMPO</h1>
+          <button
+            onClick={handleLogout}
+            style={{ background: "none", border: "none", color: "#00d672", fontSize: "13px", cursor: "pointer" }}
+          >
+            ● 接続済み（ログアウト）
+          </button>
+        </div>
+
+        <p className="section-label">MY PLAYLISTS</p>
+
+        {!editingPlaylist ? (
+          <>
+            {myPlaylists.length === 0 && !isPlaylistLoading && (
+              <button
+                onClick={loadMyPlaylists}
+                className="genre-btn active"
+                style={{ display: "block", margin: "16px auto" }}
+              >
+                プレイリストを読み込む
+              </button>
+            )}
+
+            {isPlaylistLoading && (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                <div className="loading-spinner" />
+              </div>
+            )}
+
+            <ul className="song-list">
+              {myPlaylists.map((pl) => (
+                <li
+                  key={pl.id}
+                  className="song-item"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => handleEditPlaylist(pl)}
+                >
+                  <div className="song-info">
+                    <div className="song-title">{pl.name}</div>
+                  </div>
+                  <span style={{ color: "#888", fontSize: "13px" }}>編集 →</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => { setEditingPlaylist(null); setEditingTracks([]); }}
+              style={{ background: "none", border: "none", color: "#00d672", fontSize: "16px", cursor: "pointer", marginBottom: "12px" }}
+            >
+              ← プレイリスト一覧に戻る
+            </button>
+
+            <div className="glass-card">
+              <p className="section-label">プレイリスト名</p>
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  style={{ fontSize: "13px" }}
+                />
+                <button
+                  onClick={handleRenamePlaylist}
+                  className="search-btn"
+                >
+                  変更
+                </button>
+              </div>
+            </div>
+
+            {isPlaylistLoading ? (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                <div className="loading-spinner" />
+              </div>
+            ) : (
+              <ul className="song-list">
+                {editingTracks.map((track, index) => (
+                  <li key={track.id} className="song-item">
+                    {track.image && (
+                      <img src={track.image} alt="" style={{ borderRadius: 8, flexShrink: 0 }} />
+                    )}
+                    <div className="song-info">
+                      <div className="song-title">{track.title}</div>
+                      <div className="song-artist">{track.artist}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                      <button
+                        onClick={() => handleMoveTrack(index, -1)}
+                        disabled={index === 0}
+                        style={{ background: "none", border: "1px solid #ddd", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", opacity: index === 0 ? 0.3 : 1 }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => handleMoveTrack(index, 1)}
+                        disabled={index === editingTracks.length - 1}
+                        style={{ background: "none", border: "1px solid #ddd", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", opacity: index === editingTracks.length - 1 ? 0.3 : 1 }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => handleRemoveTrack(track.id)}
+                        style={{ background: "none", border: "1px solid #ff4444", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", color: "#ff4444" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+
+        <div className="bottom-nav">
+          <button className="nav-item" onClick={() => setActiveTab("tracks")}>
+            <span className="nav-icon">≡</span>
+            Tracks
+          </button>
+          <button className="nav-item active" onClick={() => setActiveTab("playing")}>
+            <span className="nav-icon">▶</span>
+            Playing
+          </button>
+          <button className="nav-item" onClick={() => setActiveTab("tracks")}>
+            <span className="nav-icon">⚙</span>
+            Settings
+          </button>
+        </div>
       </div>
     );
   }
@@ -675,13 +809,7 @@ function App() {
         <div className="app-header">
           <button
             onClick={handleBackFromSimilar}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#00d672",
-              fontSize: "20px",
-              cursor: "pointer",
-            }}
+            style={{ background: "none", border: "none", color: "#00d672", fontSize: "20px", cursor: "pointer" }}
           >
             ← 戻る
           </button>
@@ -691,9 +819,7 @@ function App() {
         {isSimilarLoading ? (
           <div style={{ textAlign: "center", marginTop: "32px" }}>
             <div className="loading-spinner" />
-            <p className="section-label" style={{ marginTop: "12px" }}>
-              BPM {selectedSong.bpm} の楽曲を検索中...
-            </p>
+            <p className="section-label" style={{ marginTop: "12px" }}>BPM {selectedSong.bpm} の楽曲を検索中...</p>
           </div>
         ) : (
           <>
@@ -712,18 +838,8 @@ function App() {
             {token && (
               <div className="glass-card">
                 <div className="genre-filter">
-                  <button
-                    className={`genre-btn ${similarMode === "library" ? "active" : ""}`}
-                    onClick={() => setSimilarMode("library")}
-                  >
-                    マイライブラリ
-                  </button>
-                  <button
-                    className={`genre-btn ${similarMode === "discover" ? "active" : ""}`}
-                    onClick={() => setSimilarMode("discover")}
-                  >
-                    オススメ
-                  </button>
+                  <button className={`genre-btn ${similarMode === "library" ? "active" : ""}`} onClick={() => setSimilarMode("library")}>マイライブラリ</button>
+                  <button className={`genre-btn ${similarMode === "discover" ? "active" : ""}`} onClick={() => setSimilarMode("discover")}>オススメ</button>
                 </div>
               </div>
             )}
@@ -732,72 +848,29 @@ function App() {
               <div className="glass-card">
                 <p className="section-label">GENRE</p>
                 <div className="genre-filter">
-                  {["All", ...new Set(similarTracks.map((s) => s.genre))].map(
-                    (genre) => (
-                      <button
-                        key={genre}
-                        className={`genre-btn ${similarGenre === genre ? "active" : ""}`}
-                        onClick={() => setSimilarGenre(genre)}
-                      >
-                        {genre}
-                      </button>
-                    ),
-                  )}
+                  {["All", ...new Set(similarTracks.map((s) => s.genre))].map((genre) => (
+                    <button key={genre} className={`genre-btn ${similarGenre === genre ? "active" : ""}`} onClick={() => setSimilarGenre(genre)}>{genre}</button>
+                  ))}
                 </div>
               </div>
             )}
 
             <p className="section-label">
-              {token && similarMode === "library"
-                ? `${libraryMatches.length} TRACKS`
-                : `${filteredSimilarTracks.length} TRACKS`}
+              {token && similarMode === "library" ? `${libraryMatches.length} TRACKS` : `${filteredSimilarTracks.length} TRACKS`}
             </p>
             <ul className="song-list">
-              {(token && similarMode === "library"
-                ? libraryMatches
-                : filteredSimilarTracks
-              ).map((song) => {
+              {(token && similarMode === "library" ? libraryMatches : filteredSimilarTracks).map((song) => {
                 const isSelected = selectedTracks.find((t) => t.id === song.id);
                 return (
-                  <li
-                    key={song.id}
-                    className="song-item"
-                    style={{
-                      cursor: "pointer",
-                      border: isSelected
-                        ? "2px solid #00d672"
-                        : "1px solid rgba(255, 255, 255, 0.8)",
-                    }}
-                    onClick={() => toggleTrackSelect(song)}
-                  >
-                    {song.image && (
-                      <img
-                        src={song.image}
-                        alt=""
-                        style={{ borderRadius: 8, flexShrink: 0 }}
-                      />
-                    )}
+                  <li key={song.id} className="song-item" style={{ cursor: "pointer", border: isSelected ? "2px solid #00d672" : "1px solid rgba(255, 255, 255, 0.8)" }} onClick={() => toggleTrackSelect(song)}>
+                    {song.image && <img src={song.image} alt="" style={{ borderRadius: 8, flexShrink: 0 }} />}
                     <div className="song-info">
                       <div className="song-title">{song.title}</div>
                       <div className="song-artist">{song.artist}</div>
                     </div>
-                    {song.genre && (
-                      <span
-                        className="genre-btn"
-                        style={{ fontSize: "11px", padding: "4px 8px" }}
-                      >
-                        {song.genre}
-                      </span>
-                    )}
+                    {song.genre && <span className="genre-btn" style={{ fontSize: "11px", padding: "4px 8px" }}>{song.genre}</span>}
                     {renderPlayButton(song)}
-                    <div
-                      className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
-                      style={
-                        isSelected
-                          ? { background: "#00d672", color: "#fff" }
-                          : {}
-                      }
-                    >
+                    <div className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`} style={isSelected ? { background: "#00d672", color: "#fff" } : {}}>
                       {isSelected ? "✓" : song.bpm}
                     </div>
                   </li>
@@ -811,14 +884,16 @@ function App() {
         {renderPlaylistMessage()}
 
         <div className="bottom-nav">
-          <button className="nav-item">
-            <span className="nav-icon">◎</span>
-            BPM
-          </button>
-          <button className="nav-item active">
+          <button className="nav-item active" onClick={() => { handleBackFromSimilar(); setActiveTab("tracks"); }}>
             <span className="nav-icon">≡</span>
             Tracks
           </button>
+          {token && (
+            <button className="nav-item" onClick={() => { handleBackFromSimilar(); setActiveTab("playing"); loadMyPlaylists(); }}>
+              <span className="nav-icon">▶</span>
+              Playing
+            </button>
+          )}
           <button className="nav-item">
             <span className="nav-icon">⚙</span>
             Settings
@@ -833,118 +908,61 @@ function App() {
     <div className="app">
       <div className="app-header">
         <h1>TEMPO</h1>
-        {token ? (
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#00d672",
-              fontSize: "13px",
-              cursor: "pointer",
-            }}
-          >
+        {token && (
+          <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#00d672", fontSize: "13px", cursor: "pointer" }}>
             ● 接続済み（ログアウト）
           </button>
-        ) : null}
+        )}
       </div>
 
-      {/* ログインボタン（未ログイン時） */}
       {!token && (
         <div className="glass-card" style={{ textAlign: "center" }}>
           <p className="section-label">アカウント連携</p>
-          <p style={{ fontSize: "13px", color: "#888", marginBottom: "12px" }}>
-            ログインするとマイライブラリやプレイリスト作成が使えます
-          </p>
+          <p style={{ fontSize: "13px", color: "#888", marginBottom: "12px" }}>ログインするとマイライブラリやプレイリスト作成が使えます</p>
           <div className="genre-filter" style={{ justifyContent: "center" }}>
-            <button
-              className="genre-btn active"
-              onClick={() => {
-                localStorage.setItem("music_service", "spotify");
-                setMusicService("spotify");
-                loginWithSpotify();
-              }}
-            >
-              Spotify
-            </button>
-            <button
-              className="genre-btn active"
-              onClick={async () => {
-                try {
-                  await loginWithAppleMusic();
-                  setMusicService("apple");
-                  setToken("apple-music-authorized");
-                  localStorage.setItem("music_service", "apple");
-                } catch (err) {
-                  console.error("Apple Music login failed:", err);
-                }
-              }}
-              style={{ background: "#fc3c44" }}
-            >
-              Apple Music
-            </button>
+            <button className="genre-btn active" onClick={() => { localStorage.setItem("music_service", "spotify"); setMusicService("spotify"); loginWithSpotify(); }}>Spotify</button>
+            <button className="genre-btn active" onClick={async () => {
+              try {
+                await loginWithAppleMusic();
+                setMusicService("apple");
+                setToken("apple-music-authorized");
+                localStorage.setItem("music_service", "apple");
+              } catch (err) { console.error("Apple Music login failed:", err); }
+            }} style={{ background: "#fc3c44" }}>Apple Music</button>
           </div>
         </div>
       )}
 
-      {/* タブ切り替え（ログイン時のみライブラリ表示） */}
-      {token ? (
+      {token && (
         <div className="glass-card">
           <div className="genre-filter">
-            <button
-              className={`genre-btn ${mode === "library" ? "active" : ""}`}
-              onClick={() => setMode("library")}
-            >
-              マイライブラリ
-            </button>
-            <button
-              className={`genre-btn ${mode === "search" ? "active" : ""}`}
-              onClick={() => setMode("search")}
-            >
-              検索
-            </button>
+            <button className={`genre-btn ${mode === "library" ? "active" : ""}`} onClick={() => setMode("library")}>マイライブラリ</button>
+            <button className={`genre-btn ${mode === "search" ? "active" : ""}`} onClick={() => setMode("search")}>検索</button>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* 検索ボックス（常に表示） */}
       {(mode === "search" || !token) && (
         <div className="glass-card">
           <p className="section-label">SEARCH TRACKS</p>
           <div className="search-box">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="曲名やアーティスト名で検索"
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            />
-            <button onClick={handleSearch} className="search-btn">
-              検索
-            </button>
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="曲名やアーティスト名で検索" onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
+            <button onClick={handleSearch} className="search-btn">検索</button>
           </div>
         </div>
       )}
 
-      {/* ライブラリ検索（ログイン時） */}
       {token && mode === "library" && (
         <div className="glass-card">
           <p className="section-label">MY LIBRARY</p>
           {isLibraryLoading ? (
             <div style={{ textAlign: "center", padding: "16px" }}>
               <div className="loading-spinner" />
-              <p style={{ color: "#888", marginTop: "8px", fontSize: "13px" }}>
-                ライブラリを読み込み中...
-              </p>
+              <p style={{ color: "#888", marginTop: "8px", fontSize: "13px" }}>ライブラリを読み込み中...</p>
             </div>
           ) : (
             <div className="search-box">
-              <input
-                type="text"
-                value={libraryQuery}
-                onChange={(e) => setLibraryQuery(e.target.value)}
-                placeholder="ライブラリ内を検索"
-              />
+              <input type="text" value={libraryQuery} onChange={(e) => setLibraryQuery(e.target.value)} placeholder="ライブラリ内を検索" />
             </div>
           )}
         </div>
@@ -953,70 +971,35 @@ function App() {
       {isSearching && (
         <div style={{ textAlign: "center", marginTop: "32px" }}>
           <div className="loading-spinner" />
-          <p className="section-label" style={{ marginTop: "12px" }}>
-            検索中...
-          </p>
+          <p className="section-label" style={{ marginTop: "12px" }}>検索中...</p>
         </div>
       )}
 
-      {/* 曲リスト */}
       {((mode === "search" && searchResults.length > 0) ||
-        (mode === "library" && libraryTracks.length > 0) ||
-        (!token && searchResults.length > 0)) && (
+        (!token && searchResults.length > 0) ||
+        (mode === "library" && libraryTracks.length > 0)) && (
         <>
           <div className="bpm-display">
             <span className="bpm-value">{targetBpm}</span>
             <span className="bpm-label">BPM</span>
           </div>
 
-          <BpmFilter
-            minBpm={minBpm}
-            maxBpm={maxBpm}
-            onMinChange={setMinBpm}
-            onMaxChange={setMaxBpm}
-          />
+          <BpmFilter minBpm={minBpm} maxBpm={maxBpm} onMinChange={setMinBpm} onMaxChange={setMaxBpm} />
 
           <p className="section-label">
-            {mode === "search" || !token
-              ? filteredResults.length
-              : filteredLibraryTracks.length}{" "}
-            TRACKS
+            {mode === "search" || !token ? filteredResults.length : filteredLibraryTracks.length} TRACKS
           </p>
           <ul className="song-list">
-            {(mode === "search" || !token
-              ? filteredResults
-              : displayedTracks
-            ).map((song) => (
-              <li
-                key={song.id}
-                className="song-item"
-                style={{
-                  cursor: song.bpm && song.bpm !== 0 ? "pointer" : "default",
-                }}
-                onClick={() => handleSongSelect(song)}
-              >
-                {song.image && (
-                  <img
-                    src={song.image}
-                    alt=""
-                    style={{ borderRadius: 8, flexShrink: 0 }}
-                  />
-                )}
+            {(mode === "search" || !token ? filteredResults : displayedTracks).map((song) => (
+              <li key={song.id} className="song-item" style={{ cursor: song.bpm && song.bpm !== 0 ? "pointer" : "default" }} onClick={() => handleSongSelect(song)}>
+                {song.image && <img src={song.image} alt="" style={{ borderRadius: 8, flexShrink: 0 }} />}
                 <div className="song-info">
                   <div className="song-title">{song.title}</div>
                   <div className="song-artist">{song.artist}</div>
                 </div>
                 {renderPlayButton(song)}
-                <span
-                  className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
-                >
-                  {song.bpm === null ? (
-                    <div className="loading-spinner-small" />
-                  ) : song.bpm === 0 ? (
-                    "-"
-                  ) : (
-                    song.bpm
-                  )}
+                <span className={`song-bpm-badge ${song.bpm === null ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}>
+                  {song.bpm === null ? <div className="loading-spinner-small" /> : song.bpm === 0 ? "-" : song.bpm}
                 </span>
               </li>
             ))}
@@ -1025,37 +1008,30 @@ function App() {
           {musicService === "spotify" && playingTrackId && (
             <div className="floating-controls">
               <div className="floating-embed">
-                <iframe
-                  src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
-                  allow="autoplay; clipboard-write; encrypted-media"
-                  loading="lazy"
-                />
+                <iframe src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`} allow="autoplay; clipboard-write; encrypted-media" loading="lazy" />
               </div>
             </div>
           )}
 
-          {mode === "library" &&
-            token &&
-            displayCount < filteredLibraryTracks.length && (
-              <div
-                ref={loadMoreRef}
-                style={{ textAlign: "center", margin: "16px 0" }}
-              >
-                <div className="loading-spinner" />
-              </div>
-            )}
+          {mode === "library" && token && displayCount < filteredLibraryTracks.length && (
+            <div ref={loadMoreRef} style={{ textAlign: "center", margin: "16px 0" }}>
+              <div className="loading-spinner" />
+            </div>
+          )}
         </>
       )}
 
       <div className="bottom-nav">
-        <button className="nav-item">
-          <span className="nav-icon">◎</span>
-          BPM
-        </button>
-        <button className="nav-item active">
+        <button className={`nav-item ${activeTab === "tracks" ? "active" : ""}`} onClick={() => setActiveTab("tracks")}>
           <span className="nav-icon">≡</span>
           Tracks
         </button>
+        {token && (
+          <button className={`nav-item ${activeTab === "playing" ? "active" : ""}`} onClick={() => { setActiveTab("playing"); loadMyPlaylists(); }}>
+            <span className="nav-icon">▶</span>
+            Playing
+          </button>
+        )}
         <button className="nav-item">
           <span className="nav-icon">⚙</span>
           Settings
