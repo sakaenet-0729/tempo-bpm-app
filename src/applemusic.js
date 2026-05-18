@@ -39,7 +39,7 @@ export async function searchAppleMusic(query) {
     `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=10`,
     {
       headers: { Authorization: `Bearer ${token}` },
-    },
+    }
   );
   const data = await response.json();
   if (data.results?.songs?.data) {
@@ -60,7 +60,7 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
   const music = MusicKit.getInstance();
   try {
     const result = await music.api.music(
-      `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`,
+      `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`
     );
     if (result.data.data && result.data.data.length > 0) {
       return {
@@ -86,7 +86,7 @@ export async function getAppleMusicRecentlyPlayed() {
   try {
     const music = MusicKit.getInstance();
     const result = await music.api.music(
-      "/v1/me/recent/played/tracks?limit=20",
+      "/v1/me/recent/played/tracks?limit=20"
     );
     if (result.data.data) {
       return result.data.data.map((song) => ({
@@ -139,19 +139,48 @@ export async function createAppleMusicPlaylist(name, trackIds) {
           },
         }),
       },
-    },
+    }
   );
   return response;
+}
+
+export async function getMyAppleMusicPlaylists() {
+  const music = MusicKit.getInstance();
+  try {
+    const result = await music.api.music(
+      "/v1/me/library/playlists?limit=50"
+    );
+    if (result.data.data) {
+      return result.data.data
+        .filter((pl) => {
+          const desc = pl.attributes.description;
+          if (!desc) return false;
+          if (typeof desc === "string") return desc.includes("Created by TEMPO");
+          if (typeof desc === "object" && desc.standard) return desc.standard.includes("Created by TEMPO");
+          return false;
+        })
+        .map((pl) => ({
+          id: pl.id,
+          name: pl.attributes.name,
+        }));
+    }
+    return [];
+  } catch (err) {
+    console.error("Get playlists error:", err);
+    return [];
+  }
 }
 
 export async function getAppleMusicPlaylistTracks(playlistId) {
   const music = MusicKit.getInstance();
   try {
     const result = await music.api.music(
-      `/v1/me/library/playlists/${playlistId}/tracks`,
+      `/v1/me/library/playlists/${playlistId}`,
+      { include: "tracks" }
     );
-    if (result.data.data) {
-      return result.data.data.map((song) => ({
+    const tracks = result.data.data?.[0]?.relationships?.tracks?.data;
+    if (tracks) {
+      return tracks.map((song) => ({
         id: song.id,
         title: song.attributes.name,
         artist: song.attributes.artistName,
@@ -164,118 +193,5 @@ export async function getAppleMusicPlaylistTracks(playlistId) {
   } catch (err) {
     console.error("Get playlist tracks error:", err);
     return [];
-  }
-}
-
-export async function getMyAppleMusicPlaylists() {
-  const music = MusicKit.getInstance();
-  try {
-    const result = await music.api.music("/v1/me/library/playlists?limit=50");
-    if (result.data.data) {
-      return result.data.data
-        .filter((pl) => {
-          const desc = pl.attributes.description;
-          if (!desc) return false;
-          if (typeof desc === "string")
-            return desc.includes("Created by TEMPO");
-          if (typeof desc === "object" && desc.standard)
-            return desc.standard.includes("Created by TEMPO");
-          return false;
-        })
-        .map((pl) => ({
-          id: pl.id,
-          name: pl.attributes.name,
-          description:
-            typeof pl.attributes.description === "object"
-              ? pl.attributes.description.standard || ""
-              : pl.attributes.description || "",
-        }));
-    }
-    return [];
-  } catch (err) {
-    console.error("Get playlists error:", err);
-    return [];
-  }
-}
-
-export async function removeFromAppleMusicPlaylist(playlistId, trackIds) {
-  const music = MusicKit.getInstance();
-  try {
-    const result = await music.api.music(
-      `/v1/me/library/playlists/${playlistId}/tracks`,
-    );
-    const currentTracks = result.data.data || [];
-    const remainingTracks = currentTracks.filter(
-      (t) => !trackIds.includes(t.id),
-    );
-
-    await music.api.music(
-      `/v1/me/library/playlists/${playlistId}/tracks`,
-      {},
-      {
-        fetchOptions: {
-          method: "PUT",
-          body: JSON.stringify({
-            data: remainingTracks.map((t) => ({
-              id: t.id,
-              type: "songs",
-            })),
-          }),
-        },
-      },
-    );
-    return true;
-  } catch (err) {
-    console.error("Remove from playlist error:", err);
-    return false;
-  }
-}
-
-export async function reorderAppleMusicPlaylist(playlistId, trackIds) {
-  const music = MusicKit.getInstance();
-  try {
-    await music.api.music(
-      `/v1/me/library/playlists/${playlistId}/tracks`,
-      {},
-      {
-        fetchOptions: {
-          method: "PUT",
-          body: JSON.stringify({
-            data: trackIds.map((id) => ({
-              id: id,
-              type: "songs",
-            })),
-          }),
-        },
-      },
-    );
-    return true;
-  } catch (err) {
-    console.error("Reorder playlist error:", err);
-    return false;
-  }
-}
-
-export async function renameAppleMusicPlaylist(playlistId, name) {
-  const music = MusicKit.getInstance();
-  try {
-    await music.api.music(
-      `/v1/me/library/playlists/${playlistId}`,
-      {},
-      {
-        fetchOptions: {
-          method: "PATCH",
-          body: JSON.stringify({
-            attributes: {
-              name: name,
-            },
-          }),
-        },
-      },
-    );
-    return true;
-  } catch (err) {
-    console.error("Rename playlist error:", err);
-    return false;
   }
 }

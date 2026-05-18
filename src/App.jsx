@@ -26,9 +26,6 @@ import {
   createAppleMusicPlaylist,
   getMyAppleMusicPlaylists,
   getAppleMusicPlaylistTracks,
-  removeFromAppleMusicPlaylist,
-  reorderAppleMusicPlaylist,
-  renameAppleMusicPlaylist,
 } from "./applemusic";
 
 function App() {
@@ -40,7 +37,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [libraryTracks, setLibraryTracks] = useState([]);
   const [libraryQuery, setLibraryQuery] = useState("");
-  const [mode, setMode] = useState("search");
+  const [mode, setMode] = useState("library");
   const [displayCount, setDisplayCount] = useState(50);
   const [selectedSong, setSelectedSong] = useState(null);
   const [similarTracks, setSimilarTracks] = useState([]);
@@ -60,12 +57,11 @@ function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const loadMoreRef = useRef(null);
 
-  // Playing tab states
+  // Playing tab
   const [activeTab, setActiveTab] = useState("tracks");
   const [myPlaylists, setMyPlaylists] = useState([]);
-  const [editingPlaylist, setEditingPlaylist] = useState(null);
-  const [editingTracks, setEditingTracks] = useState([]);
-  const [editingName, setEditingName] = useState("");
+  const [viewingPlaylist, setViewingPlaylist] = useState(null);
+  const [playlistTracks, setPlaylistTracks] = useState([]);
   const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
 
   // ===== 初期化 =====
@@ -101,6 +97,7 @@ function App() {
         return;
       }
 
+      // 未ログイン：Apple Music検索だけ使えるようにする
       try {
         await initAppleMusic();
       } catch (err) {
@@ -120,23 +117,29 @@ function App() {
       if (musicService === "apple") {
         const cached = localStorage.getItem("apple_library_cache");
         if (cached) {
-          const cachedData = JSON.parse(cached);
-          setLibraryTracks(cachedData);
-          setIsLibraryLoading(false);
+          try {
+            const cachedData = JSON.parse(cached);
+            if (cachedData && cachedData.length > 0) {
+              setLibraryTracks(cachedData);
+              setIsLibraryLoading(false);
 
-          const needsBpm = cachedData.filter((t) => t.bpm === null);
-          for (let i = 0; i < needsBpm.length; i++) {
-            await new Promise((r) => setTimeout(r, 800));
-            const bpm = await getTrackBpm(needsBpm[i].title, needsBpm[i].artist);
-            setLibraryTracks((prev) => {
-              const updated = prev.map((s) =>
-                s.id === needsBpm[i].id ? { ...s, bpm: bpm ?? 0 } : s
-              );
-              localStorage.setItem("apple_library_cache", JSON.stringify(updated));
-              return updated;
-            });
+              const needsBpm = cachedData.filter((t) => t.bpm === null);
+              for (let i = 0; i < needsBpm.length; i++) {
+                await new Promise((r) => setTimeout(r, 800));
+                const bpm = await getTrackBpm(needsBpm[i].title, needsBpm[i].artist);
+                setLibraryTracks((prev) => {
+                  const updated = prev.map((s) =>
+                    s.id === needsBpm[i].id ? { ...s, bpm: bpm ?? 0 } : s
+                  );
+                  localStorage.setItem("apple_library_cache", JSON.stringify(updated));
+                  return updated;
+                });
+              }
+              return;
+            }
+          } catch {
+            localStorage.removeItem("apple_library_cache");
           }
-          return;
         }
 
         setIsLibraryLoading(true);
@@ -149,6 +152,7 @@ function App() {
           setLibraryTracks(allTracks);
           setIsLibraryLoading(false);
 
+          // 最初の20件のBPMを取得
           for (let i = 0; i < Math.min(allTracks.length, 20); i++) {
             await new Promise((r) => setTimeout(r, 800));
             const bpm = await getTrackBpm(allTracks[i].title, allTracks[i].artist);
@@ -181,6 +185,7 @@ function App() {
               return [...prev, ...toAdd];
             });
 
+            // 新しく追加した曲のBPMを取得
             for (const track of newTracks) {
               await new Promise((r) => setTimeout(r, 800));
               const bpm = await getTrackBpm(track.title, track.artist);
@@ -199,8 +204,11 @@ function App() {
           }
         }
 
+        // キャッシュ保存
         setLibraryTracks((current) => {
-          localStorage.setItem("apple_library_cache", JSON.stringify(current));
+          if (current.length > 0) {
+            localStorage.setItem("apple_library_cache", JSON.stringify(current));
+          }
           return current;
         });
         return;
@@ -211,27 +219,34 @@ function App() {
 
       const cached = localStorage.getItem("library_cache");
       if (cached) {
-        const cachedData = JSON.parse(cached);
-        setLibraryTracks(cachedData);
-        setIsLibraryLoading(false);
+        try {
+          const cachedData = JSON.parse(cached);
+          if (cachedData && cachedData.length > 0) {
+            setLibraryTracks(cachedData);
+            setIsLibraryLoading(false);
 
-        const needsBpm = cachedData.filter((t) => t.bpm === null);
-        for (const track of needsBpm) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const bpm = await getTrackBpm(track.title, track.artist);
-          setLibraryTracks((prev) => {
-            const updated = prev.map((s) =>
-              s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
-            );
-            localStorage.setItem("library_cache", JSON.stringify(updated));
-            return updated;
-          });
+            const needsBpm = cachedData.filter((t) => t.bpm === null);
+            for (const track of needsBpm) {
+              await new Promise((r) => setTimeout(r, 1000));
+              const bpm = await getTrackBpm(track.title, track.artist);
+              setLibraryTracks((prev) => {
+                const updated = prev.map((s) =>
+                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s
+                );
+                localStorage.setItem("library_cache", JSON.stringify(updated));
+                return updated;
+              });
+            }
+            return;
+          }
+        } catch {
+          localStorage.removeItem("library_cache");
         }
-        return;
       }
 
       setIsLibraryLoading(true);
 
+      // よく聞く曲を先に
       const topData = await getMyTopTracks(token, 0);
       const topTracks = topData.items
         .filter((item) => item)
@@ -300,7 +315,9 @@ function App() {
           (track, index, self) =>
             self.findIndex((t) => t.id === track.id) === index
         );
-        localStorage.setItem("library_cache", JSON.stringify(unique));
+        if (unique.length > 0) {
+          localStorage.setItem("library_cache", JSON.stringify(unique));
+        }
 
         (async () => {
           const needsBpm = unique.filter((t) => t.bpm === null);
@@ -464,7 +481,7 @@ function App() {
     setTimeout(() => setPlaylistCreated(false), 3000);
   };
 
-  // ===== Playing tab handlers =====
+  // ===== Playing tab =====
   const loadMyPlaylists = async () => {
     setIsPlaylistLoading(true);
     if (musicService === "apple") {
@@ -474,57 +491,14 @@ function App() {
     setIsPlaylistLoading(false);
   };
 
-  const handleEditPlaylist = async (playlist) => {
-    setEditingPlaylist(playlist);
-    setEditingName(playlist.name);
+  const handleViewPlaylist = async (playlist) => {
+    setViewingPlaylist(playlist);
     setIsPlaylistLoading(true);
     if (musicService === "apple") {
       const tracks = await getAppleMusicPlaylistTracks(playlist.id);
-      setEditingTracks(tracks);
+      setPlaylistTracks(tracks);
     }
     setIsPlaylistLoading(false);
-  };
-
-  const handleRemoveTrack = async (trackId) => {
-    if (!editingPlaylist) return;
-    if (musicService === "apple") {
-      const success = await removeFromAppleMusicPlaylist(editingPlaylist.id, [trackId]);
-      if (success) {
-        setEditingTracks((prev) => prev.filter((t) => t.id !== trackId));
-      }
-    }
-  };
-
-  const handleMoveTrack = async (index, direction) => {
-    if (!editingPlaylist) return;
-    const newTracks = [...editingTracks];
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= newTracks.length) return;
-
-    [newTracks[index], newTracks[newIndex]] = [newTracks[newIndex], newTracks[index]];
-    setEditingTracks(newTracks);
-
-    if (musicService === "apple") {
-      await reorderAppleMusicPlaylist(
-        editingPlaylist.id,
-        newTracks.map((t) => t.id)
-      );
-    }
-  };
-
-  const handleRenamePlaylist = async () => {
-    if (!editingPlaylist || !editingName) return;
-    if (musicService === "apple") {
-      const success = await renameAppleMusicPlaylist(editingPlaylist.id, editingName);
-      if (success) {
-        setMyPlaylists((prev) =>
-          prev.map((p) =>
-            p.id === editingPlaylist.id ? { ...p, name: editingName } : p
-          )
-        );
-        setEditingPlaylist((prev) => ({ ...prev, name: editingName }));
-      }
-    }
   };
 
   // ===== フィルタリング =====
@@ -653,6 +627,32 @@ function App() {
     );
   };
 
+  // ===== ボトムナビ =====
+  const renderBottomNav = () => (
+    <div className="bottom-nav">
+      <button
+        className={`nav-item ${activeTab === "tracks" ? "active" : ""}`}
+        onClick={() => { setActiveTab("tracks"); setViewingPlaylist(null); }}
+      >
+        <span className="nav-icon">≡</span>
+        Tracks
+      </button>
+      {token && (
+        <button
+          className={`nav-item ${activeTab === "playing" ? "active" : ""}`}
+          onClick={() => { setActiveTab("playing"); loadMyPlaylists(); }}
+        >
+          <span className="nav-icon">▶</span>
+          Playing
+        </button>
+      )}
+      <button className="nav-item">
+        <span className="nav-icon">⚙</span>
+        Settings
+      </button>
+    </div>
+  );
+
   // ===== 初期化中 =====
   if (isInitializing) {
     return (
@@ -663,37 +663,32 @@ function App() {
     );
   }
 
-  // ===== Playing画面（プレイリスト管理） =====
+  // ===== Playing画面 =====
   if (activeTab === "playing" && token) {
     return (
       <div className="app">
         <div className="app-header">
           <h1>TEMPO</h1>
-          <button
-            onClick={handleLogout}
-            style={{ background: "none", border: "none", color: "#00d672", fontSize: "13px", cursor: "pointer" }}
-          >
+          <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#00d672", fontSize: "13px", cursor: "pointer" }}>
             ● 接続済み（ログアウト）
           </button>
         </div>
 
-        <p className="section-label">MY PLAYLISTS</p>
-
-        {!editingPlaylist ? (
+        {!viewingPlaylist ? (
           <>
-            {myPlaylists.length === 0 && !isPlaylistLoading && (
-              <button
-                onClick={loadMyPlaylists}
-                className="genre-btn active"
-                style={{ display: "block", margin: "16px auto" }}
-              >
-                プレイリストを読み込む
-              </button>
-            )}
+            <p className="section-label">MY PLAYLISTS</p>
 
             {isPlaylistLoading && (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
                 <div className="loading-spinner" />
+              </div>
+            )}
+
+            {!isPlaylistLoading && myPlaylists.length === 0 && (
+              <div className="glass-card" style={{ textAlign: "center" }}>
+                <p style={{ color: "#888", fontSize: "14px" }}>
+                  TEMPOで作成したプレイリストはまだありません
+                </p>
               </div>
             )}
 
@@ -703,12 +698,12 @@ function App() {
                   key={pl.id}
                   className="song-item"
                   style={{ cursor: "pointer" }}
-                  onClick={() => handleEditPlaylist(pl)}
+                  onClick={() => handleViewPlaylist(pl)}
                 >
                   <div className="song-info">
                     <div className="song-title">{pl.name}</div>
                   </div>
-                  <span style={{ color: "#888", fontSize: "13px" }}>編集 →</span>
+                  <span style={{ color: "#00d672", fontSize: "13px" }}>詳細 →</span>
                 </li>
               ))}
             </ul>
@@ -716,28 +711,26 @@ function App() {
         ) : (
           <>
             <button
-              onClick={() => { setEditingPlaylist(null); setEditingTracks([]); }}
+              onClick={() => { setViewingPlaylist(null); setPlaylistTracks([]); }}
               style={{ background: "none", border: "none", color: "#00d672", fontSize: "16px", cursor: "pointer", marginBottom: "12px" }}
             >
-              ← プレイリスト一覧に戻る
+              ← プレイリスト一覧
             </button>
 
             <div className="glass-card">
-              <p className="section-label">プレイリスト名</p>
-              <div className="search-box">
-                <input
-                  type="text"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  style={{ fontSize: "13px" }}
-                />
-                <button
-                  onClick={handleRenamePlaylist}
-                  className="search-btn"
-                >
-                  変更
-                </button>
-              </div>
+              <p className="section-label">{viewingPlaylist.name}</p>
+              <p style={{ fontSize: "13px", color: "#888", marginBottom: "12px" }}>
+                {playlistTracks.length}曲
+              </p>
+              <a
+                href={`https://music.apple.com/library/playlist/${viewingPlaylist.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="genre-btn active"
+                style={{ textDecoration: "none", fontSize: "13px", padding: "8px 16px", display: "inline-block" }}
+              >
+                Apple Musicで編集
+              </a>
             </div>
 
             {isPlaylistLoading ? (
@@ -746,7 +739,7 @@ function App() {
               </div>
             ) : (
               <ul className="song-list">
-                {editingTracks.map((track, index) => (
+                {playlistTracks.map((track) => (
                   <li key={track.id} className="song-item">
                     {track.image && (
                       <img src={track.image} alt="" style={{ borderRadius: 8, flexShrink: 0 }} />
@@ -755,28 +748,7 @@ function App() {
                       <div className="song-title">{track.title}</div>
                       <div className="song-artist">{track.artist}</div>
                     </div>
-                    <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                      <button
-                        onClick={() => handleMoveTrack(index, -1)}
-                        disabled={index === 0}
-                        style={{ background: "none", border: "1px solid #ddd", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", opacity: index === 0 ? 0.3 : 1 }}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        onClick={() => handleMoveTrack(index, 1)}
-                        disabled={index === editingTracks.length - 1}
-                        style={{ background: "none", border: "1px solid #ddd", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", opacity: index === editingTracks.length - 1 ? 0.3 : 1 }}
-                      >
-                        ↓
-                      </button>
-                      <button
-                        onClick={() => handleRemoveTrack(track.id)}
-                        style={{ background: "none", border: "1px solid #ff4444", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", color: "#ff4444" }}
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    {renderPlayButton(track)}
                   </li>
                 ))}
               </ul>
@@ -784,20 +756,7 @@ function App() {
           </>
         )}
 
-        <div className="bottom-nav">
-          <button className="nav-item" onClick={() => setActiveTab("tracks")}>
-            <span className="nav-icon">≡</span>
-            Tracks
-          </button>
-          <button className="nav-item active" onClick={() => setActiveTab("playing")}>
-            <span className="nav-icon">▶</span>
-            Playing
-          </button>
-          <button className="nav-item" onClick={() => setActiveTab("tracks")}>
-            <span className="nav-icon">⚙</span>
-            Settings
-          </button>
-        </div>
+        {renderBottomNav()}
       </div>
     );
   }
@@ -807,10 +766,7 @@ function App() {
     return (
       <div className="app">
         <div className="app-header">
-          <button
-            onClick={handleBackFromSimilar}
-            style={{ background: "none", border: "none", color: "#00d672", fontSize: "20px", cursor: "pointer" }}
-          >
+          <button onClick={handleBackFromSimilar} style={{ background: "none", border: "none", color: "#00d672", fontSize: "20px", cursor: "pointer" }}>
             ← 戻る
           </button>
           <h1>TEMPO</h1>
@@ -882,23 +838,7 @@ function App() {
 
         {renderFloatingControls()}
         {renderPlaylistMessage()}
-
-        <div className="bottom-nav">
-          <button className="nav-item active" onClick={() => { handleBackFromSimilar(); setActiveTab("tracks"); }}>
-            <span className="nav-icon">≡</span>
-            Tracks
-          </button>
-          {token && (
-            <button className="nav-item" onClick={() => { handleBackFromSimilar(); setActiveTab("playing"); loadMyPlaylists(); }}>
-              <span className="nav-icon">▶</span>
-              Playing
-            </button>
-          )}
-          <button className="nav-item">
-            <span className="nav-icon">⚙</span>
-            Settings
-          </button>
-        </div>
+        {renderBottomNav()}
       </div>
     );
   }
@@ -915,6 +855,7 @@ function App() {
         )}
       </div>
 
+      {/* ログインボタン */}
       {!token && (
         <div className="glass-card" style={{ textAlign: "center" }}>
           <p className="section-label">アカウント連携</p>
@@ -927,12 +868,14 @@ function App() {
                 setMusicService("apple");
                 setToken("apple-music-authorized");
                 localStorage.setItem("music_service", "apple");
+                setMode("library");
               } catch (err) { console.error("Apple Music login failed:", err); }
             }} style={{ background: "#fc3c44" }}>Apple Music</button>
           </div>
         </div>
       )}
 
+      {/* タブ切り替え */}
       {token && (
         <div className="glass-card">
           <div className="genre-filter">
@@ -942,6 +885,7 @@ function App() {
         </div>
       )}
 
+      {/* 検索ボックス */}
       {(mode === "search" || !token) && (
         <div className="glass-card">
           <p className="section-label">SEARCH TRACKS</p>
@@ -952,6 +896,7 @@ function App() {
         </div>
       )}
 
+      {/* マイライブラリ */}
       {token && mode === "library" && (
         <div className="glass-card">
           <p className="section-label">MY LIBRARY</p>
@@ -975,6 +920,7 @@ function App() {
         </div>
       )}
 
+      {/* 曲リスト */}
       {((mode === "search" && searchResults.length > 0) ||
         (!token && searchResults.length > 0) ||
         (mode === "library" && libraryTracks.length > 0)) && (
@@ -1021,22 +967,7 @@ function App() {
         </>
       )}
 
-      <div className="bottom-nav">
-        <button className={`nav-item ${activeTab === "tracks" ? "active" : ""}`} onClick={() => setActiveTab("tracks")}>
-          <span className="nav-icon">≡</span>
-          Tracks
-        </button>
-        {token && (
-          <button className={`nav-item ${activeTab === "playing" ? "active" : ""}`} onClick={() => { setActiveTab("playing"); loadMyPlaylists(); }}>
-            <span className="nav-icon">▶</span>
-            Playing
-          </button>
-        )}
-        <button className="nav-item">
-          <span className="nav-icon">⚙</span>
-          Settings
-        </button>
-      </div>
+      {renderBottomNav()}
     </div>
   );
 }
