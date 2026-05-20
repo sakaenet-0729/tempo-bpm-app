@@ -882,7 +882,7 @@ function App() {
                     ? "Apple Musicで編集"
                     : "Spotifyで開く"}
                 </a>
-              </div>
+              </div>{" "}
             </div>
             {isPlaylistLoading ? (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
