@@ -820,7 +820,14 @@ function App() {
               >
                 {playlistTracks.length}曲
               </p>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                }}
+              >
                 {/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
                   <a
                     href="music://"
