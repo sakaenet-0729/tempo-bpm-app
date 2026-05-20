@@ -539,15 +539,17 @@ function App() {
       setPlaylistTracks(tracks);
     } else if (musicService === "spotify" && token) {
       const items = await getPlaylistTracks(playlist.id, token);
-      console.log("items:", items.length, items[0]);
       const tracks = items
-        .filter((item) => item.track)
-        .map((item) => ({
-          id: item.track.id,
-          title: item.track.name,
-          artist: item.track.artists[0].name,
-          image: item.track.album.images[2]?.url,
-        }));
+        .filter((item) => item.track || item.item)
+        .map((item) => {
+          const t = item.track || item.item;
+          return {
+            id: t.id,
+            title: t.name,
+            artist: t.artists[0].name,
+            image: t.album.images[2]?.url,
+          };
+        });
       setPlaylistTracks(tracks);
     }
     setIsPlaylistLoading(false);
