@@ -1064,16 +1064,18 @@ function App() {
             ログインするとマイライブラリやプレイリスト作成が使えます
           </p>
           <div className="genre-filter" style={{ justifyContent: "center" }}>
-            <button
-              className="genre-btn active"
-              onClick={() => {
-                localStorage.setItem("music_service", "spotify");
-                setMusicService("spotify");
-                loginWithSpotify();
-              }}
-            >
-              Spotify
-            </button>
+            {window.location.search.includes("mode=tester") && (
+              <button
+                className="genre-btn active"
+                onClick={() => {
+                  localStorage.setItem("music_service", "spotify");
+                  setMusicService("spotify");
+                  loginWithSpotify();
+                }}
+              >
+                Spotify
+              </button>
+            )}
             <button
               className="genre-btn active"
               onClick={async () => {
