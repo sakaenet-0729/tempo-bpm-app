@@ -515,6 +515,15 @@ function App() {
     if (musicService === "apple") {
       const playlists = await getMyAppleMusicPlaylists();
       setMyPlaylists(playlists);
+    } else if (musicService === "spotify" && token) {
+      const playlists = await getMyPlaylists(token);
+      const tempoPlaylists = playlists
+        .filter((pl) => (pl.description || "").includes("Created by TEMPO"))
+        .map((pl) => ({
+          id: pl.id,
+          name: pl.name,
+        }));
+      setMyPlaylists(tempoPlaylists);
     }
     setIsPlaylistLoading(false);
   };
@@ -524,6 +533,17 @@ function App() {
     setIsPlaylistLoading(true);
     if (musicService === "apple") {
       const tracks = await getAppleMusicPlaylistTracks(playlist.id);
+      setPlaylistTracks(tracks);
+    } else if (musicService === "spotify" && token) {
+      const items = await getPlaylistTracks(playlist.id, token);
+      const tracks = items
+        .filter((item) => item.track)
+        .map((item) => ({
+          id: item.track.id,
+          title: item.track.name,
+          artist: item.track.artists[0].name,
+          image: item.track.album.images[2]?.url,
+        }));
       setPlaylistTracks(tracks);
     }
     setIsPlaylistLoading(false);
@@ -828,22 +848,27 @@ function App() {
                   justifyContent: "center",
                 }}
               >
-                {/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
-                  <a
-                    href="music://"
-                    className="genre-btn active"
-                    style={{
-                      textDecoration: "none",
-                      fontSize: "13px",
-                      padding: "8px 16px",
-                    }}
-                  >
-                    アプリで開く
-                  </a>
-                )}
+                {musicService === "apple" &&
+                  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
+                    <a
+                      href="music://"
+                      className="genre-btn active"
+                      style={{
+                        textDecoration: "none",
+                        fontSize: "13px",
+                        padding: "8px 16px",
+                      }}
+                    >
+                      アプリで開く
+                    </a>
+                  )}
 
                 <a
-                  href="https://music.apple.com/jp/browse"
+                  href={
+                    musicService === "apple"
+                      ? "https://music.apple.com/jp/browse"
+                      : `https://open.spotify.com/playlist/${viewingPlaylist.id}`
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="genre-btn active"
@@ -853,10 +878,12 @@ function App() {
                     padding: "8px 16px",
                   }}
                 >
-                  Apple Musicで編集
+                  {musicService === "apple"
+                    ? "Apple Musicで編集"
+                    : "Spotifyで開く"}
                 </a>
-              </div>{" "}
-            </div>{" "}
+              </div>
+            </div>
             {isPlaylistLoading ? (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
                 <div className="loading-spinner" />
