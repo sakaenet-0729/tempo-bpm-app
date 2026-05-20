@@ -150,37 +150,25 @@ function App() {
 
         setIsLibraryLoading(true);
 
-        // 最近聞いた曲を最優先
+        // 1. まず全曲を取得（BPMは後）
         let allTracks = [];
+
+        // 最近聞いた曲を先頭に
         try {
           const recent = await getAppleMusicRecentlyPlayed();
           allTracks = [...recent];
           setLibraryTracks(allTracks);
           setIsLibraryLoading(false);
-
-          // 最初の20件のBPMを取得
-          for (let i = 0; i < Math.min(allTracks.length, 20); i++) {
-            await new Promise((r) => setTimeout(r, 800));
-            const bpm = await getTrackBpm(
-              allTracks[i].title,
-              allTracks[i].artist,
-            );
-            setLibraryTracks((prev) =>
-              prev.map((s) =>
-                s.id === allTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
-              ),
-            );
-          }
         } catch (err) {
           console.error("Recent played error:", err);
           setIsLibraryLoading(false);
         }
 
-        // ライブラリの残りを20件ずつ（最近追加順）
+        // ライブラリの残りを20件ずつ取得
         let offset = 0;
         let hasMore = true;
         while (hasMore) {
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 500));
           const result = await getAppleMusicLibrary(offset, 20);
           if (result.tracks.length > 0) {
             const newTracks = result.tracks.filter(
@@ -194,18 +182,6 @@ function App() {
               return [...prev, ...toAdd];
             });
 
-            // 新しく追加した曲のBPMを取得
-            for (const track of newTracks) {
-              await new Promise((r) => setTimeout(r, 800));
-              const bpm = await getTrackBpm(track.title, track.artist);
-              setLibraryTracks((prev) => {
-                const updated = prev.map((s) =>
-                  s.id === track.id ? { ...s, bpm: bpm ?? 0 } : s,
-                );
-                return updated;
-              });
-            }
-
             offset += 20;
             hasMore = result.hasMore;
           } else {
@@ -213,20 +189,38 @@ function App() {
           }
         }
 
-        // キャッシュ保存
-        setLibraryTracks((current) => {
-          if (current.length > 0) {
-            localStorage.setItem(
-              "apple_library_cache",
-              JSON.stringify(current),
+        // 2. 全曲取得完了 → キャッシュ保存
+        localStorage.setItem("apple_library_cache", JSON.stringify(allTracks));
+
+        // 3. BPMを後から20件ずつ取得
+        for (let i = 0; i < allTracks.length; i++) {
+          await new Promise((r) => setTimeout(r, 800));
+          const bpm = await getTrackBpm(
+            allTracks[i].title,
+            allTracks[i].artist,
+          );
+          setLibraryTracks((prev) => {
+            const updated = prev.map((s) =>
+              s.id === allTracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
             );
-          }
+            // 20件ごとにキャッシュ更新
+            if (i % 20 === 0) {
+              localStorage.setItem(
+                "apple_library_cache",
+                JSON.stringify(updated),
+              );
+            }
+            return updated;
+          });
+        }
+
+        // 最終キャッシュ保存
+        setLibraryTracks((current) => {
+          localStorage.setItem("apple_library_cache", JSON.stringify(current));
           return current;
         });
         return;
-      }
-
-      // Spotifyの場合
+      } // Spotifyの場合
       if (musicService !== "spotify") return;
 
       const cached = localStorage.getItem("library_cache");
