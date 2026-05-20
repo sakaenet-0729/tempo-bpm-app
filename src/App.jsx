@@ -784,13 +784,11 @@ function App() {
         {!viewingPlaylist ? (
           <>
             <p className="section-label">MY PLAYLISTS</p>
-
             {isPlaylistLoading && (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
                 <div className="loading-spinner" />
               </div>
             )}
-
             {!isPlaylistLoading && myPlaylists.length === 0 && (
               <div className="glass-card" style={{ textAlign: "center" }}>
                 <p style={{ color: "#888", fontSize: "14px" }}>
@@ -798,20 +796,28 @@ function App() {
                 </p>
               </div>
             )}
-
             <ul className="song-list">
               {myPlaylists.map((pl) => (
                 <li
                   key={pl.id}
                   className="song-item"
                   style={{ cursor: "pointer" }}
-                  onClick={() => handleViewPlaylist(pl)}
+                  onClick={() => {
+                    if (musicService === "spotify") {
+                      window.open(
+                        `https://open.spotify.com/playlist/${pl.id}`,
+                        "_blank",
+                      );
+                    } else {
+                      handleViewPlaylist(pl);
+                    }
+                  }}
                 >
                   <div className="song-info">
                     <div className="song-title">{pl.name}</div>
                   </div>
                   <span style={{ color: "#00d672", fontSize: "13px" }}>
-                    詳細 →
+                    {musicService === "spotify" ? "Spotifyで開く →" : "詳細 →"}
                   </span>
                 </li>
               ))}
