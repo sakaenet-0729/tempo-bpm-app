@@ -220,7 +220,7 @@ function App() {
           return current;
         });
         return;
-      } // Spotifyの場合
+      }
       if (musicService !== "spotify") return;
 
       const cached = localStorage.getItem("library_cache");
