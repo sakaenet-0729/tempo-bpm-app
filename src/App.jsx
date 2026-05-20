@@ -821,34 +821,24 @@ function App() {
               >
                 {playlistTracks.length}曲
               </p>
-              <a
-                href={`music://music.apple.com/library/playlist/${viewingPlaylist.id}`}
-                className="genre-btn active"
-                style={{
-                  textDecoration: "none",
-                  fontSize: "13px",
-                  padding: "8px 16px",
-                  display: "inline-block",
-                  marginRight: "8px",
-                }}
-              >
-                アプリで編集
-              </a>
-              <a
-                href={`https://music.apple.com/library/playlist/${viewingPlaylist.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="genre-btn"
-                style={{
-                  textDecoration: "none",
-                  fontSize: "13px",
-                  padding: "8px 16px",
-                  display: "inline-block",
-                }}
-              >
-                ブラウザで開く
-              </a>
-            </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                
+                  href="music://"
+                  className="genre-btn active"
+                  style={{ textDecoration: "none", fontSize: "13px", padding: "8px 16px" }}
+                >
+                  アプリで開く
+                </a>
+                
+                  href="https://music.apple.com/jp/browse"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="genre-btn"
+                  style={{ textDecoration: "none", fontSize: "13px", padding: "8px 16px" }}
+                >
+                  ブラウザで開く
+                </a>
+              </div>            </div>
 
             {isPlaylistLoading ? (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
