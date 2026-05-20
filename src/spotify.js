@@ -353,20 +353,6 @@ export async function addTracksToPlaylist(token, playlistId, trackUris) {
   );
   return response.json();
 }
-// プレイリストの曲一覧取得（ページネーション対応）
-export async function getPlaylistTracks(playlistId, token) {
-  try {
-    const response = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!response.ok) return [];
-    const data = await response.json();
-    return data.tracks?.items || data.items?.items || [];
-  } catch {
-    return [];
-  }
-}
 
 // プレイリスト名・説明を変更
 export async function renamePlaylist(token, playlistId, name) {
