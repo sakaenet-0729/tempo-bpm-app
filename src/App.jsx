@@ -518,7 +518,10 @@ function App() {
     } else if (musicService === "spotify" && token) {
       const playlists = await getMyPlaylists(token);
       const tempoPlaylists = playlists
-        .filter((pl) => (pl.description || "").includes("Created by TEMPO"))
+        .filter((pl) => {
+          const desc = pl.description || "";
+          return desc.includes("Created by TEMPO");
+        })
         .map((pl) => ({
           id: pl.id,
           name: pl.name,
@@ -536,6 +539,7 @@ function App() {
       setPlaylistTracks(tracks);
     } else if (musicService === "spotify" && token) {
       const items = await getPlaylistTracks(playlist.id, token);
+      console.log("items:", items.length, items[0]);
       const tracks = items
         .filter((item) => item.track)
         .map((item) => ({
