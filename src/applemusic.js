@@ -36,7 +36,7 @@ export async function loginWithAppleMusic() {
 export async function searchAppleMusic(query) {
   const token = await getAppleMusicToken();
   const response = await fetch(
-    `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=10`,
+    `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=25`,
     {
       headers: { Authorization: `Bearer ${token}` },
     },
