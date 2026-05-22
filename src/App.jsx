@@ -58,6 +58,7 @@ function App() {
   const loadMoreRef = useRef(null);
   const [searchOffset, setSearchOffset] = useState(0);
   const [isSearchingMore, setIsSearchingMore] = useState(false);
+  const [similarQuery, setSimilarQuery] = useState("");
 
   // Playing tab
   const [activeTab, setActiveTab] = useState("tracks");
@@ -65,7 +66,6 @@ function App() {
   const [viewingPlaylist, setViewingPlaylist] = useState(null);
   const [playlistTracks, setPlaylistTracks] = useState([]);
   const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
-  const [similarQuery, setSimilarQuery] = useState("");
 
   // ===== 初期化 =====
   useEffect(() => {
@@ -100,7 +100,7 @@ function App() {
         return;
       }
 
-      // 未ログイン：Apple Music検索だけ使えるようにする
+      // 未ログイン：Apple Music検索だけ使える
       try {
         await initAppleMusic();
       } catch (err) {
@@ -126,7 +126,6 @@ function App() {
               setLibraryTracks(cachedData);
               setIsLibraryLoading(false);
 
-              // BPM未取得の曲を裏で20件ずつ取得
               const needsBpm = cachedData.filter((t) => t.bpm === null);
               for (let i = 0; i < needsBpm.length; i++) {
                 await new Promise((r) => setTimeout(r, 800));
@@ -147,7 +146,6 @@ function App() {
                   return updated;
                 });
               }
-              // 最終保存
               setLibraryTracks((current) => {
                 localStorage.setItem(
                   "apple_library_cache",
@@ -163,7 +161,6 @@ function App() {
         }
 
         setIsLibraryLoading(true);
-
         let allTracks = [];
 
         // 最近聞いた曲を先頭に
@@ -191,7 +188,7 @@ function App() {
           setIsLibraryLoading(false);
         }
 
-        // ライブラリを20件ずつ取得＋BPM取得を交互に
+        // ライブラリを20件ずつ取得＋最初の3バッチはBPMも取得
         let offset = 0;
         let hasMore = true;
         let batchCount = 0;
@@ -210,7 +207,7 @@ function App() {
               return [...prev, ...toAdd];
             });
 
-            // 最初の3バッチ（60件くらい）はBPMも取得
+            // 最初の3バッチ（約60件）はBPMも取得
             if (batchCount < 3) {
               for (const track of newTracks) {
                 await new Promise((r) => setTimeout(r, 800));
@@ -264,13 +261,14 @@ function App() {
           });
         }
 
-        // 最終保存
         setLibraryTracks((current) => {
           localStorage.setItem("apple_library_cache", JSON.stringify(current));
           return current;
         });
         return;
       }
+
+      // Spotifyの場合
       if (musicService !== "spotify") return;
 
       const cached = localStorage.getItem("library_cache");
@@ -302,7 +300,6 @@ function App() {
 
       setIsLibraryLoading(true);
 
-      // よく聞く曲を先に
       const topData = await getMyTopTracks(token, 0);
       const topTracks = topData.items
         .filter((item) => item)
@@ -446,13 +443,45 @@ function App() {
         image: track.album.images[2]?.url,
       }));
     } else {
-      results = await searchAppleMusic(searchQuery);
+      results = await searchAppleMusic(searchQuery, 0);
     }
 
     setSearchResults(results);
     setIsSearching(false);
 
     for (const result of results) {
+      const bpm = await getTrackBpm(result.title, result.artist);
+      setSearchResults((prev) =>
+        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
+      );
+    }
+  };
+
+  const handleSearchMore = async () => {
+    setIsSearchingMore(true);
+    const newOffset = searchOffset + 25;
+
+    let results = [];
+    if (musicService === "spotify" && token) {
+      const tracks = await searchTracks(searchQuery, token);
+      results = tracks.map((track) => ({
+        id: track.id,
+        title: track.name,
+        artist: track.artists[0].name,
+        bpm: null,
+        image: track.album.images[2]?.url,
+      }));
+    } else {
+      results = await searchAppleMusic(searchQuery, newOffset);
+    }
+
+    const existingIds = new Set(searchResults.map((t) => t.id));
+    const newResults = results.filter((t) => !existingIds.has(t.id));
+    setSearchResults((prev) => [...prev, ...newResults]);
+    setSearchOffset(newOffset);
+    setIsSearchingMore(false);
+
+    for (const result of newResults) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
         prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
@@ -467,8 +496,9 @@ function App() {
     setSimilarGenre("All");
     setPlaylistName("");
     setSelectedTracks([song]);
-    setSimilarMode("library");
+    setSimilarMode(token ? "library" : "discover");
     setPlayingTrackId(null);
+    setSimilarQuery("");
 
     const matches = libraryTracks.filter(
       (t) =>
@@ -512,15 +542,13 @@ function App() {
     if (selectedTracks.length === 0) return;
     setIsCreatingPlaylist(true);
 
-    if (musicService === "apple") {
+    if (musicService === "apple" && token) {
       try {
         const trackIds = [];
         for (const track of selectedTracks) {
-          // Apple MusicのIDは長い、GetSongBPMのIDは短い
           if (track.id && track.id.length > 10) {
             trackIds.push(track.id);
           } else {
-            // GetSongBPMの曲→Apple Musicで検索
             const results = await searchAppleMusic(
               `${track.title} ${track.artist}`,
             );
@@ -634,11 +662,6 @@ function App() {
     .filter((song) => {
       if (song.bpm === null || song.bpm === 0) return true;
       return song.bpm >= minBpm && song.bpm <= maxBpm;
-    })
-    .sort((a, b) => {
-      if (a.bpm === null || a.bpm === 0) return 1;
-      if (b.bpm === null || b.bpm === 0) return -1;
-      return a.bpm - b.bpm;
     });
 
   const displayedTracks =
@@ -674,11 +697,9 @@ function App() {
         setPlayingTrackId(song.id);
         if (musicService !== "spotify") {
           try {
-            // Apple MusicのIDは長い、GetSongBPMのIDは短い
             if (song.id && song.id.length > 10) {
               await playAppleMusicTrack(song.id);
             } else {
-              // GetSongBPMの曲→Apple Musicで検索して再生
               const results = await searchAppleMusic(
                 `${song.title} ${song.artist}`,
               );
@@ -704,6 +725,7 @@ function App() {
       {playingTrackId === song.id ? "⏸" : "▶"}
     </button>
   );
+
   // ===== フローティング =====
   const renderFloatingControls = () => {
     const hasEmbed = musicService === "spotify" && playingTrackId;
@@ -912,6 +934,7 @@ function App() {
             >
               ← プレイリスト一覧
             </button>
+
             <div className="glass-card">
               <p className="section-label">{viewingPlaylist.name}</p>
               <p
@@ -945,7 +968,6 @@ function App() {
                       アプリで開く
                     </a>
                   )}
-
                 <a
                   href={
                     musicService === "apple"
@@ -965,8 +987,9 @@ function App() {
                     ? "Apple Musicを開く"
                     : "Spotifyで開く"}
                 </a>
-              </div>{" "}
+              </div>
             </div>
+
             {isPlaylistLoading ? (
               <div style={{ textAlign: "center", margin: "16px 0" }}>
                 <div className="loading-spinner" />
@@ -1177,7 +1200,6 @@ function App() {
         )}
       </div>
 
-      {/* ログインボタン */}
       {!token && (
         <div className="glass-card" style={{ textAlign: "center" }}>
           <p className="section-label">アカウント連携</p>
@@ -1218,7 +1240,6 @@ function App() {
         </div>
       )}
 
-      {/* タブ切り替え */}
       {token && (
         <div className="glass-card">
           <div className="genre-filter">
@@ -1238,7 +1259,6 @@ function App() {
         </div>
       )}
 
-      {/* 検索ボックス */}
       {(mode === "search" || !token) && (
         <div className="glass-card">
           <p className="section-label">SEARCH TRACKS</p>
@@ -1257,7 +1277,6 @@ function App() {
         </div>
       )}
 
-      {/* マイライブラリ */}
       {token && mode === "library" && (
         <div className="glass-card">
           <p className="section-label">MY LIBRARY</p>
@@ -1290,7 +1309,6 @@ function App() {
         </div>
       )}
 
-      {/* 曲リスト */}
       {((mode === "search" && searchResults.length > 0) ||
         (!token && searchResults.length > 0) ||
         (mode === "library" && libraryTracks.length > 0)) && (
@@ -1353,43 +1371,11 @@ function App() {
             ))}
           </ul>
 
-          {mode === "search" &&
+          {(mode === "search" || !token) &&
             searchResults.length > 0 &&
             !isSearchingMore && (
               <button
-                onClick={async () => {
-                  setIsSearchingMore(true);
-                  const newOffset = searchOffset + 25;
-                  let results = [];
-                  if (musicService === "spotify" && token) {
-                    const tracks = await searchTracks(searchQuery, token);
-                    results = tracks.map((track) => ({
-                      id: track.id,
-                      title: track.name,
-                      artist: track.artists[0].name,
-                      bpm: null,
-                      image: track.album.images[2]?.url,
-                    }));
-                  } else {
-                    results = await searchAppleMusic(searchQuery);
-                  }
-                  const existingIds = new Set(searchResults.map((t) => t.id));
-                  const newResults = results.filter(
-                    (t) => !existingIds.has(t.id),
-                  );
-                  setSearchResults((prev) => [...prev, ...newResults]);
-                  setSearchOffset(newOffset);
-                  setIsSearchingMore(false);
-
-                  for (const result of newResults) {
-                    const bpm = await getTrackBpm(result.title, result.artist);
-                    setSearchResults((prev) =>
-                      prev.map((s) =>
-                        s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s,
-                      ),
-                    );
-                  }
-                }}
+                onClick={handleSearchMore}
                 className="genre-btn active"
                 style={{ display: "block", margin: "16px auto" }}
               >

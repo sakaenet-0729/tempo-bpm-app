@@ -33,10 +33,10 @@ export async function loginWithAppleMusic() {
   return music;
 }
 
-export async function searchAppleMusic(query) {
+export async function searchAppleMusic(query, offset = 0) {
   const token = await getAppleMusicToken();
   const response = await fetch(
-    `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=25`,
+    `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=25&offset=${offset}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     },
@@ -77,9 +77,9 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
       };
     }
   } catch (err) {
-    // 403なら再認証を試みる
     if (err.toString().includes("403")) {
       try {
+        const music = MusicKit.getInstance();
         await music.authorize();
         const result = await music.api.music(
           `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`,
@@ -98,9 +98,7 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
             hasMore: result.data.data.length === limit,
           };
         }
-      } catch (retryErr) {
-        console.warn("Apple Music re-auth failed:", retryErr);
-      }
+      } catch {}
     }
     console.warn("Apple Music library error:", err);
   }
@@ -108,8 +106,8 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
 }
 
 export async function getAppleMusicRecentlyPlayed() {
-  const music = MusicKit.getInstance();
   try {
+    const music = MusicKit.getInstance();
     const result = await music.api.music(
       "/v1/me/recent/played/tracks?limit=20",
     );
@@ -128,6 +126,7 @@ export async function getAppleMusicRecentlyPlayed() {
   } catch (err) {
     if (err.toString().includes("403")) {
       try {
+        const music = MusicKit.getInstance();
         await music.authorize();
         const result = await music.api.music(
           "/v1/me/recent/played/tracks?limit=20",
