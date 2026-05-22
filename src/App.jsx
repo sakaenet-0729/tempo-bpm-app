@@ -56,6 +56,8 @@ function App() {
   const [musicService, setMusicService] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const loadMoreRef = useRef(null);
+  const [searchOffset, setSearchOffset] = useState(0);
+  const [isSearchingMore, setIsSearchingMore] = useState(false);
 
   // Playing tab
   const [activeTab, setActiveTab] = useState("tracks");
@@ -63,6 +65,7 @@ function App() {
   const [viewingPlaylist, setViewingPlaylist] = useState(null);
   const [playlistTracks, setPlaylistTracks] = useState([]);
   const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
+  const [similarQuery, setSimilarQuery] = useState("");
 
   // ===== 初期化 =====
   useEffect(() => {
@@ -430,6 +433,7 @@ function App() {
     if (!searchQuery) return;
     setIsSearching(true);
     setPlayingTrackId(null);
+    setSearchOffset(0);
 
     let results = [];
     if (musicService === "spotify" && token) {
@@ -489,6 +493,7 @@ function App() {
     setPlaylistCreated(false);
     setSimilarMode("library");
     setPlayingTrackId(null);
+    setSimilarQuery("");
     try {
       pauseAppleMusic();
     } catch {}
@@ -641,9 +646,16 @@ function App() {
       ? filteredResults
       : filteredLibraryTracks.slice(0, displayCount);
 
-  const filteredSimilarTracks = similarTracks.filter(
-    (s) => similarGenre === "All" || s.genre === similarGenre,
-  );
+  const filteredSimilarTracks = similarTracks
+    .filter((s) => similarGenre === "All" || s.genre === similarGenre)
+    .filter((s) => {
+      if (!similarQuery) return true;
+      const q = similarQuery.toLowerCase();
+      return (
+        (s.title || "").toLowerCase().includes(q) ||
+        (s.artist || "").toLowerCase().includes(q)
+      );
+    });
 
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
@@ -950,7 +962,7 @@ function App() {
                   }}
                 >
                   {musicService === "apple"
-                    ? "Apple Musicで編集"
+                    ? "Apple Musicを開く"
                     : "Spotifyで開く"}
                 </a>
               </div>{" "}
@@ -1065,6 +1077,17 @@ function App() {
                 </div>
               </div>
             )}
+
+            <div className="glass-card">
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={similarQuery}
+                  onChange={(e) => setSimilarQuery(e.target.value)}
+                  placeholder="曲名やアーティスト名で絞り込み"
+                />
+              </div>
+            </div>
 
             <p className="section-label">
               {token && similarMode === "library"
@@ -1329,6 +1352,56 @@ function App() {
               </li>
             ))}
           </ul>
+
+          {mode === "search" &&
+            searchResults.length > 0 &&
+            !isSearchingMore && (
+              <button
+                onClick={async () => {
+                  setIsSearchingMore(true);
+                  const newOffset = searchOffset + 25;
+                  let results = [];
+                  if (musicService === "spotify" && token) {
+                    const tracks = await searchTracks(searchQuery, token);
+                    results = tracks.map((track) => ({
+                      id: track.id,
+                      title: track.name,
+                      artist: track.artists[0].name,
+                      bpm: null,
+                      image: track.album.images[2]?.url,
+                    }));
+                  } else {
+                    results = await searchAppleMusic(searchQuery);
+                  }
+                  const existingIds = new Set(searchResults.map((t) => t.id));
+                  const newResults = results.filter(
+                    (t) => !existingIds.has(t.id),
+                  );
+                  setSearchResults((prev) => [...prev, ...newResults]);
+                  setSearchOffset(newOffset);
+                  setIsSearchingMore(false);
+
+                  for (const result of newResults) {
+                    const bpm = await getTrackBpm(result.title, result.artist);
+                    setSearchResults((prev) =>
+                      prev.map((s) =>
+                        s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s,
+                      ),
+                    );
+                  }
+                }}
+                className="genre-btn active"
+                style={{ display: "block", margin: "16px auto" }}
+              >
+                もっと検索
+              </button>
+            )}
+
+          {isSearchingMore && (
+            <div style={{ textAlign: "center", margin: "16px 0" }}>
+              <div className="loading-spinner" />
+            </div>
+          )}
 
           {musicService === "spotify" && playingTrackId && (
             <div className="floating-controls">
