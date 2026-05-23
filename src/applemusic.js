@@ -48,6 +48,7 @@ export async function searchAppleMusic(query, offset = 0) {
       title: song.attributes.name,
       artist: song.attributes.artistName,
       bpm: null,
+      genre: song.attributes.genreNames?.[0] || null,
       image: song.attributes.artwork?.url
         ?.replace("{w}", "64")
         ?.replace("{h}", "64"),
@@ -79,7 +80,6 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
   } catch (err) {
     if (err.toString().includes("403")) {
       try {
-        const music = MusicKit.getInstance();
         await music.authorize();
         const result = await music.api.music(
           `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`,
@@ -106,8 +106,8 @@ export async function getAppleMusicLibrary(offset = 0, limit = 20) {
 }
 
 export async function getAppleMusicRecentlyPlayed() {
+  const music = MusicKit.getInstance();
   try {
-    const music = MusicKit.getInstance();
     const result = await music.api.music(
       "/v1/me/recent/played/tracks?limit=20",
     );
@@ -126,7 +126,6 @@ export async function getAppleMusicRecentlyPlayed() {
   } catch (err) {
     if (err.toString().includes("403")) {
       try {
-        const music = MusicKit.getInstance();
         await music.authorize();
         const result = await music.api.music(
           "/v1/me/recent/played/tracks?limit=20",
