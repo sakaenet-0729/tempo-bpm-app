@@ -1045,7 +1045,13 @@ function App() {
                     const withBpm = [];
                     for (const song of results) {
                       const bpm = await getTrackBpm(song.title, song.artist);
-                      withBpm.push({ ...song, bpm: bpm ?? 0 });
+                      if (
+                        bpm &&
+                        selectedSong &&
+                        Math.abs(bpm - selectedSong.bpm) <= 10
+                      ) {
+                        withBpm.push({ ...song, bpm });
+                      }
                     }
                     setSimilarTracks((prev) => {
                       const existingIds = new Set(prev.map((t) => t.id));
@@ -1054,6 +1060,7 @@ function App() {
                       );
                       return [...prev, ...newTracks];
                     });
+                    setSimilarQuery("");
                     setIsSimilarLoading(false);
                   }}
                   className="genre-btn active"
@@ -1078,18 +1085,21 @@ function App() {
                 ? libraryMatches
                 : filteredSimilarTracks
               ).map((song) => {
-                const isSelected = selectedTracks.find((t) => t.id === song.id);
+                const isSelected =
+                  token && selectedTracks.find((t) => t.id === song.id);
                 return (
                   <li
                     key={song.id}
                     className="song-item"
                     style={{
-                      cursor: "pointer",
+                      cursor: token ? "pointer" : "default",
                       border: isSelected
                         ? "2px solid #00d672"
                         : "1px solid rgba(255, 255, 255, 0.8)",
                     }}
-                    onClick={() => toggleTrackSelect(song)}
+                    onClick={() => {
+                      if (token) toggleTrackSelect(song);
+                    }}
                   >
                     {song.image && (
                       <img
