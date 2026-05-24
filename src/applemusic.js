@@ -23,14 +23,16 @@ export async function initAppleMusic() {
       name: "TEMPO",
       build: "1.0.0",
     },
-    storefrontId: "jp",
   });
-  return MusicKit.getInstance();
+  const music = MusicKit.getInstance();
+  music.storefrontId = "jp";
+  return music;
 }
 
 export async function loginWithAppleMusic() {
   const music = await initAppleMusic();
   await music.authorize();
+  music.storefrontId = "jp";
   return music;
 }
 
