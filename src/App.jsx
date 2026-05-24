@@ -360,6 +360,7 @@ function App() {
 
   const handleSearch = async () => {
     if (!searchQuery) return;
+    setMode("search");
     setIsSearching(true);
     setPlayingTrackId(null);
     setSearchOffset(0);
