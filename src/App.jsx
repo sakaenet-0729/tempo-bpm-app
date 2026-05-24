@@ -359,8 +359,8 @@ function App() {
   };
 
   const handleSearch = async () => {
-    console.log("handleSearch called", searchQuery, musicService, token);
     if (!searchQuery) return;
+    setMode("search");
     setIsSearching(true);
     setPlayingTrackId(null);
     setSearchOffset(0);
