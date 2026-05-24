@@ -442,10 +442,27 @@ function App() {
     );
     setLibraryMatches(matches);
 
+    // GetSongBPMから取得して先に表示
     const results = await searchByBpm(song.bpm);
     setSimilarTracks(results);
     setIsSimilarLoading(false);
     window.scrollTo(0, 0);
+
+    // バックグラウンドでApple Musicからも取得して追加
+    try {
+      const appleResults = await searchAppleMusic(song.artist);
+      for (const s of appleResults) {
+        const bpm = await getTrackBpm(s.title, s.artist);
+        if (bpm === null || (bpm && Math.abs(bpm - song.bpm) <= 10)) {
+          setSimilarTracks((prev) => {
+            if (prev.find((t) => t.id === s.id)) return prev;
+            return [...prev, { ...s, bpm: bpm ?? 0 }];
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Apple Music auto-search error:", err);
+    }
   };
 
   const handleBackFromSimilar = () => {
@@ -1104,14 +1121,14 @@ function App() {
                     )}
                     {renderPlayButton(song)}
                     <div
-                      className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
+                      className={`song-bpm-badge ${isSelected ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
                       style={
                         isSelected
                           ? { background: "#00d672", color: "#fff" }
                           : {}
                       }
                     >
-                      {isSelected ? "✓" : song.bpm}
+                      {isSelected ? "✓" : song.bpm === 0 ? "-" : song.bpm}
                     </div>
                   </li>
                 );
