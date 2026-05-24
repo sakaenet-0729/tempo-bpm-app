@@ -376,7 +376,10 @@ function App() {
         image: track.album.images[2]?.url,
       }));
     } else {
-      results = await searchAppleMusic(searchQuery, 0);
+      // 初回50件取得（25件×2回）
+      const results1 = await searchAppleMusic(searchQuery, 0);
+      const results2 = await searchAppleMusic(searchQuery, 25);
+      results = [...results1, ...results2];
     }
 
     setSearchResults(results);
@@ -392,7 +395,7 @@ function App() {
 
   const handleSearchMore = async () => {
     setIsSearchingMore(true);
-    const newOffset = searchOffset + 25;
+    const newOffset = searchOffset + 50;
 
     let results = [];
     if (musicService === "spotify" && token) {
@@ -405,7 +408,9 @@ function App() {
         image: track.album.images[2]?.url,
       }));
     } else {
-      results = await searchAppleMusic(searchQuery, newOffset);
+      const results1 = await searchAppleMusic(searchQuery, newOffset);
+      const results2 = await searchAppleMusic(searchQuery, newOffset + 25);
+      results = [...results1, ...results2];
     }
 
     const existingIds = new Set(searchResults.map((t) => t.id));
@@ -603,7 +608,7 @@ function App() {
   // ===== フィルタリング =====
   const filteredResults = searchResults
     .filter((song) => {
-      if (song.bpm === null) return true;
+      if (song.bpm === null || song.bpm === 0) return true;
       return song.bpm >= minBpm && song.bpm <= maxBpm;
     })
     .sort((a, b) => {
