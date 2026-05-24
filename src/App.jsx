@@ -663,7 +663,12 @@ function App() {
         setPlayingTrackId(song.id);
         if (musicService !== "spotify") {
           try {
-            await playAppleMusicTrack(song.id, song.title, song.artist);
+            await playAppleMusicTrack(
+              song.id,
+              song.title,
+              song.artist,
+              !!token,
+            );
           } catch (err) {
             console.error("Play error:", err);
           }
