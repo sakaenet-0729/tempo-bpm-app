@@ -390,9 +390,19 @@ function App() {
     }
   };
 
-  const handleSearchMore = async () => {
-    setIsSearchingMore(true);
-    const newOffset = searchOffset + 25;
+  const handleSearch = async () => {
+    console.log(
+      "search:",
+      searchQuery,
+      "service:",
+      musicService,
+      "token:",
+      token,
+    );
+    if (!searchQuery) return;
+    setIsSearching(true);
+    setPlayingTrackId(null);
+    setSearchOffset(0);
 
     let results = [];
     if (musicService === "spotify" && token) {
@@ -405,23 +415,21 @@ function App() {
         image: track.album.images[2]?.url,
       }));
     } else {
-      results = await searchAppleMusic(searchQuery, newOffset);
+      console.log("calling searchAppleMusic");
+      results = await searchAppleMusic(searchQuery, 0);
+      console.log("results:", results.length);
     }
 
-    const existingIds = new Set(searchResults.map((t) => t.id));
-    const newResults = results.filter((t) => !existingIds.has(t.id));
-    setSearchResults((prev) => [...prev, ...newResults]);
-    setSearchOffset(newOffset);
-    setIsSearchingMore(false);
+    setSearchResults(results);
+    setIsSearching(false);
 
-    for (const result of newResults) {
+    for (const result of results) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
         prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
       );
     }
   };
-
   const handleSongSelect = async (song) => {
     if (!song.bpm || song.bpm === 0) return;
     setSelectedSong(song);
