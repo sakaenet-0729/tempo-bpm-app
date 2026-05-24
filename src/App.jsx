@@ -20,18 +20,44 @@ import {
 } from "./spotify";
 
 import {
+  initAppleMusic,
   loginWithAppleMusic,
   searchAppleMusic,
   getAppleMusicLibrary,
+  getAppleMusicRecentlyPlayed,
   playAppleMusicTrack,
   pauseAppleMusic,
   createAppleMusicPlaylist,
-  getAppleMusicRecentlyPlayed,
+  getMyAppleMusicPlaylists,
+  getAppleMusicPlaylistTracks,
 } from "./applemusic";
 
-function App() {
-  const loadMoreRef = useRef(null);
+// 20曲分のBPMをまとめて取得するヘルパー
+async function fetchBpmBatch(tracks, setLibraryTracks, cacheKey) {
+  for (let i = 0; i < tracks.length; i++) {
+    await new Promise((r) => setTimeout(r, 800));
+    const bpm = await getTrackBpm(tracks[i].title, tracks[i].artist);
+    setLibraryTracks((prev) => {
+      const updated = prev.map((s) =>
+        s.id === tracks[i].id ? { ...s, bpm: bpm ?? 0 } : s,
+      );
+      // 20曲ごとにキャッシュ保存
+      if (cacheKey && (i + 1) % 20 === 0) {
+        localStorage.setItem(cacheKey, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  }
+  // バッチ完了時に最終保存
+  if (cacheKey) {
+    setLibraryTracks((current) => {
+      localStorage.setItem(cacheKey, JSON.stringify(current));
+      return current;
+    });
+  }
+}
 
+function App() {
   const [minBpm, setMinBpm] = useState(60);
   const [maxBpm, setMaxBpm] = useState(200);
   const [token, setToken] = useState(null);
@@ -56,9 +82,9 @@ function App() {
   const [similarMode, setSimilarMode] = useState("library");
   const [libraryError, setLibraryError] = useState("");
   const [playingTrackId, setPlayingTrackId] = useState(null);
-  const [musicService, setMusicService] = useState("spotify");
-  const [appleMusicInstance, setAppleMusicInstance] = useState(null);
+  const [musicService, setMusicService] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
+<<<<<<< HEAD
   const [bpmProgress, setBpmProgress] = useState({ loaded: 0, total: 0 });
 
   // ===== Play画面用state =====
@@ -74,8 +100,24 @@ function App() {
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const SCOPES =
     "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
+=======
+  const loadMoreRef = useRef(null);
+  const [searchOffset, setSearchOffset] = useState(0);
+  const [isSearchingMore, setIsSearchingMore] = useState(false);
+  const [similarQuery, setSimilarQuery] = useState("");
+>>>>>>> dev
 
-  // ===== トークン取得 =====
+  // Playing tab
+  const [activeTab, setActiveTab] = useState("tracks");
+  const [myPlaylists, setMyPlaylists] = useState([]);
+  const [viewingPlaylist, setViewingPlaylist] = useState(null);
+  const [playlistTracks, setPlaylistTracks] = useState([]);
+  const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
+
+  // BPMバックグラウンド取得の中断用
+  const bpmAbortRef = useRef(false);
+
+  // ===== 初期化 =====
   useEffect(() => {
     async function init() {
       const savedService = localStorage.getItem("music_service");
@@ -83,8 +125,7 @@ function App() {
       if (savedService === "apple") {
         setMusicService("apple");
         try {
-          const music = await loginWithAppleMusic();
-          setAppleMusicInstance(music);
+          await loginWithAppleMusic();
           setToken("apple-music-authorized");
         } catch (err) {
           console.error("Apple Music auto-login failed:", err);
@@ -93,16 +134,26 @@ function App() {
         return;
       }
 
-      const saved = localStorage.getItem("spotify_token");
-      if (saved) {
-        setMusicService("spotify");
-        setToken(saved);
-      } else {
-        const accessToken = await getAccessToken();
-        if (accessToken) {
+      if (savedService === "spotify") {
+        const saved = localStorage.getItem("spotify_token");
+        if (saved) {
           setMusicService("spotify");
-          setToken(accessToken);
+          setToken(saved);
+        } else {
+          const accessToken = await getAccessToken();
+          if (accessToken) {
+            setMusicService("spotify");
+            setToken(accessToken);
+          }
         }
+        setIsInitializing(false);
+        return;
+      }
+
+      try {
+        await initAppleMusic();
+      } catch (err) {
+        console.error("MusicKit init error:", err);
       }
       setIsInitializing(false);
     }
@@ -111,6 +162,7 @@ function App() {
 
   // ===== ライブラリ取得 =====
   useEffect(() => {
+<<<<<<< HEAD
     let cancelled = false; // コンポーネントがアンマウントされたら処理を止める
 
     // BPMを安全に更新するヘルパー（APIが落ちていても表示が壊れない）
@@ -162,28 +214,40 @@ function App() {
       setBpmProgress({ loaded: 0, total: 0 });
     }
 
+=======
+>>>>>>> dev
     async function fetchLibrary() {
-      if (!token) return;
+      if (!token || !musicService) return;
 
-      // ===== Apple Musicの場合 =====
+      // Apple Musicの場合
       if (musicService === "apple") {
         const cached = localStorage.getItem("apple_library_cache");
         if (cached) {
           try {
             const cachedData = JSON.parse(cached);
-            if (!cancelled) {
+            if (cachedData && cachedData.length > 0) {
               setLibraryTracks(cachedData);
               setIsLibraryLoading(false);
+
+              // BPM未取得を20曲ずつバッチ処理
+              const needsBpm = cachedData.filter((t) => t.bpm === null);
+              for (let batch = 0; batch < needsBpm.length; batch += 20) {
+                const chunk = needsBpm.slice(batch, batch + 20);
+                await fetchBpmBatch(
+                  chunk,
+                  setLibraryTracks,
+                  "apple_library_cache",
+                );
+              }
+              return;
             }
-            const needsBpm = cachedData.filter((t) => t.bpm === null);
-            await fetchBpmInBatches(needsBpm, "apple_library_cache");
           } catch {
             localStorage.removeItem("apple_library_cache");
           }
-          return;
         }
 
         setIsLibraryLoading(true);
+<<<<<<< HEAD
         try {
           const [tracks, recentTracks] = await Promise.all([
             getAppleMusicLibrary(),
@@ -207,20 +271,87 @@ function App() {
           setIsLibraryLoading(false);
 
           await fetchBpmInBatches(sorted, "apple_library_cache");
+=======
+        let allTracks = [];
+
+        // 最近聞いた曲を先頭に
+        try {
+          const recent = await getAppleMusicRecentlyPlayed();
+          allTracks = [...recent];
+          setLibraryTracks(allTracks);
+          setIsLibraryLoading(false);
+
+          // 最初の20件のBPMを取得
+          await fetchBpmBatch(allTracks.slice(0, 20), setLibraryTracks, null);
+>>>>>>> dev
         } catch (err) {
-          console.error("Apple Music library error:", err);
-          if (!cancelled) setIsLibraryLoading(false);
+          console.error("Recent played error:", err);
+          setIsLibraryLoading(false);
+        }
+
+        // ライブラリを20件ずつ取得 + 最初3バッチはBPMも取得
+        let offset = 0;
+        let hasMore = true;
+        let batchCount = 0;
+        while (hasMore) {
+          await new Promise((r) => setTimeout(r, 500));
+          const result = await getAppleMusicLibrary(offset, 20);
+          if (result.tracks.length > 0) {
+            const newTracks = result.tracks.filter(
+              (t) => !allTracks.find((a) => a.id === t.id),
+            );
+            allTracks = [...allTracks, ...newTracks];
+
+            setLibraryTracks((prev) => {
+              const existingIds = new Set(prev.map((t) => t.id));
+              const toAdd = newTracks.filter((t) => !existingIds.has(t.id));
+              return [...prev, ...toAdd];
+            });
+
+            if (batchCount < 3) {
+              await fetchBpmBatch(newTracks, setLibraryTracks, null);
+            }
+
+            offset += 20;
+            hasMore = result.hasMore;
+            batchCount++;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        // キャッシュ保存
+        if (allTracks.length > 0) {
+          setLibraryTracks((current) => {
+            localStorage.setItem(
+              "apple_library_cache",
+              JSON.stringify(current),
+            );
+            return current;
+          });
+        }
+
+        // 残りのBPMを20曲ずつバックグラウンドで取得
+        bpmAbortRef.current = false;
+        const tracksNeedBpm = allTracks.filter((t) => t.bpm === null);
+        for (let batch = 0; batch < tracksNeedBpm.length; batch += 20) {
+          if (bpmAbortRef.current) break;
+          const chunk = tracksNeedBpm.slice(batch, batch + 20);
+          await fetchBpmBatch(chunk, setLibraryTracks, "apple_library_cache");
         }
         return;
       }
 
-      // ===== Spotifyの場合 =====
+      // Spotifyの場合
+      if (musicService !== "spotify") return;
+
       const cached = localStorage.getItem("library_cache");
       const cachedTopIds = localStorage.getItem("spotify_top_ids");
 
       if (cached) {
         try {
           const cachedData = JSON.parse(cached);
+<<<<<<< HEAD
           let sorted = cachedData;
 
           // top曲の順番が保存されていれば先頭に並び替え
@@ -236,30 +367,42 @@ function App() {
 
           if (!cancelled) {
             setLibraryTracks(sorted);
+=======
+          if (cachedData && cachedData.length > 0) {
+            setLibraryTracks(cachedData);
+>>>>>>> dev
             setIsLibraryLoading(false);
+
+            const needsBpm = cachedData.filter((t) => t.bpm === null);
+            for (let batch = 0; batch < needsBpm.length; batch += 20) {
+              const chunk = needsBpm.slice(batch, batch + 20);
+              await fetchBpmBatch(chunk, setLibraryTracks, "library_cache");
+            }
+            return;
           }
+<<<<<<< HEAD
           const needsBpm = sorted.filter((t) => t.bpm === null);
           await fetchBpmInBatches(needsBpm, "library_cache");
+=======
+>>>>>>> dev
         } catch {
           localStorage.removeItem("library_cache");
           localStorage.removeItem("spotify_top_ids");
         }
-        return;
       }
 
       setIsLibraryLoading(true);
 
-      // Step1: よく聞く曲を最優先で表示
       const topData = await getMyTopTracks(token, 0);
-      if (cancelled) return;
-
-      const topTracks = (topData.items || []).filter(Boolean).map((track) => ({
-        id: track.id,
-        title: track.name,
-        artist: track.artists[0].name,
-        bpm: null,
-        image: track.album.images[2]?.url,
-      }));
+      const topTracks = topData.items
+        .filter((item) => item)
+        .map((track) => ({
+          id: track.id,
+          title: track.name,
+          artist: track.artists[0].name,
+          bpm: null,
+          image: track.album.images[2]?.url,
+        }));
 
       // top曲のID順を保存（次回キャッシュ読み込み時の並び替え用）
       localStorage.setItem(
@@ -270,16 +413,11 @@ function App() {
       setLibraryTracks(topTracks);
       setIsLibraryLoading(false);
 
-      // Step2: よく聞く曲のBPMを先に取得（3曲並列）
-      await fetchBpmInBatches(topTracks, null);
-      if (cancelled) return;
+      await fetchBpmBatch(topTracks.slice(0, 20), setLibraryTracks, null);
 
-      // Step3: いいねした曲を追加
       const likedData = await getMyTracks(token);
-      if (cancelled) return;
-
-      const likedTracks = (likedData.items || [])
-        .filter((item) => item?.track)
+      const likedTracks = likedData.items
+        .filter((item) => item.track)
         .map((item) => ({
           id: item.track.id,
           title: item.track.name,
@@ -289,6 +427,7 @@ function App() {
         }));
 
       setLibraryTracks((prev) => {
+<<<<<<< HEAD
         const existingKeys = new Set(
           prev.map((t) => `${t.title}|||${t.artist}`),
         );
@@ -296,32 +435,30 @@ function App() {
           (t) => !existingKeys.has(`${t.title}|||${t.artist}`),
         );
         return [...prev, ...newTracks];
+=======
+        const existingIds = new Set(prev.map((t) => t.id));
+        return [...prev, ...likedTracks.filter((t) => !existingIds.has(t.id))];
+>>>>>>> dev
       });
 
-      // Step4: プレイリストの曲を追加（全プレイリスト取得後に一括マージ）
       const playlists = await getMyPlaylists(token);
-      if (cancelled) return;
-
-      const allPlaylistTracks = [];
       for (const pl of playlists) {
-        if (cancelled) return;
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 2000));
         const items = await getPlaylistTracks(pl.id, token);
-        const tracks = (items || [])
-          .filter((item) => item?.track || item?.item)
+        const tracks = items
+          .filter((item) => item.track || item.item)
           .map((item) => {
             const t = item.track || item.item;
             return {
               id: t.id,
               title: t.name,
-              artist: t.artists[0]?.name || "Unknown",
+              artist: t.artists[0].name,
               bpm: null,
-              image: t.album?.images[2]?.url,
+              image: t.album.images[2]?.url,
             };
           });
-        allPlaylistTracks.push(...tracks);
-      }
 
+<<<<<<< HEAD
       // 全プレイリスト分をまとめて重複除去してからマージ
       // title+artistで判定（同じ曲でもリマスター等でidが異なるケースに対応）
       if (!cancelled) {
@@ -368,39 +505,40 @@ function App() {
         const needsBpm = finalTracks.filter((t) => t.bpm === null);
         await fetchBpmInBatches(needsBpm, "library_cache");
       }
-    }
+=======
+        setLibraryTracks((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          return [...prev, ...tracks.filter((t) => !existingIds.has(t.id))];
+        });
+      }
 
-    fetchLibrary();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, musicService]);
-
-  // ===== 無限スクロール =====
-  useEffect(() => {
-    if (!loadMoreRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isLoadingMore) {
-          if (mode === "library") {
-            setIsLoadingMore(true);
-            setTimeout(() => {
-              setDisplayCount((prev) => prev + 50);
-              setIsLoadingMore(false);
-            }, 800);
-          }
+      setLibraryTracks((current) => {
+        const unique = current.filter(
+          (track, index, self) =>
+            self.findIndex((t) => t.id === track.id) === index,
+        );
+        if (unique.length > 0) {
+          localStorage.setItem("library_cache", JSON.stringify(unique));
         }
-      },
-      { threshold: 0.1 },
-    );
 
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [displayCount, libraryTracks.length, isLoadingMore, mode]);
+        (async () => {
+          const needsBpm = unique.filter((t) => t.bpm === null);
+          for (let batch = 0; batch < needsBpm.length; batch += 20) {
+            const chunk = needsBpm.slice(batch, batch + 20);
+            await fetchBpmBatch(chunk, setLibraryTracks, "library_cache");
+          }
+        })();
+
+        return unique;
+      });
+>>>>>>> dev
+    }
+    fetchLibrary();
+  }, [token, musicService]);
 
   // ===== ハンドラー =====
   const handleLogout = () => {
+    bpmAbortRef.current = true;
     localStorage.removeItem("spotify_token");
     localStorage.removeItem("library_cache");
     localStorage.removeItem("apple_library_cache");
@@ -408,19 +546,20 @@ function App() {
     setToken(null);
     setSearchResults([]);
     setLibraryTracks([]);
-    setMusicService("spotify");
-    setAppleMusicInstance(null);
+    setMusicService(null);
+    setPlayingTrackId(null);
+    setActiveTab("tracks");
   };
 
   const handleSearch = async () => {
     if (!searchQuery) return;
-    if (musicService === "spotify" && !token) return;
+    setMode("search");
     setIsSearching(true);
     setPlayingTrackId(null);
+    setSearchOffset(0);
 
     let results = [];
-
-    if (musicService === "spotify") {
+    if (musicService === "spotify" && token) {
       const tracks = await searchTracks(searchQuery, token);
       results = tracks.map((track) => ({
         id: track.id,
@@ -430,13 +569,50 @@ function App() {
         image: track.album.images[2]?.url,
       }));
     } else {
-      results = await searchAppleMusic(searchQuery);
+      // 初回50件取得（25件×2回）
+      const results1 = await searchAppleMusic(searchQuery, 0);
+      const results2 = await searchAppleMusic(searchQuery, 25);
+      results = [...results1, ...results2];
     }
 
     setSearchResults(results);
     setIsSearching(false);
 
     for (const result of results) {
+      const bpm = await getTrackBpm(result.title, result.artist);
+      setSearchResults((prev) =>
+        prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
+      );
+    }
+  };
+
+  const handleSearchMore = async () => {
+    setIsSearchingMore(true);
+    const newOffset = searchOffset + 50;
+
+    let results = [];
+    if (musicService === "spotify" && token) {
+      const tracks = await searchTracks(searchQuery, token);
+      results = tracks.map((track) => ({
+        id: track.id,
+        title: track.name,
+        artist: track.artists[0].name,
+        bpm: null,
+        image: track.album.images[2]?.url,
+      }));
+    } else {
+      const results1 = await searchAppleMusic(searchQuery, newOffset);
+      const results2 = await searchAppleMusic(searchQuery, newOffset + 25);
+      results = [...results1, ...results2];
+    }
+
+    const existingIds = new Set(searchResults.map((t) => t.id));
+    const newResults = results.filter((t) => !existingIds.has(t.id));
+    setSearchResults((prev) => [...prev, ...newResults]);
+    setSearchOffset(newOffset);
+    setIsSearchingMore(false);
+
+    for (const result of newResults) {
       const bpm = await getTrackBpm(result.title, result.artist);
       setSearchResults((prev) =>
         prev.map((s) => (s.id === result.id ? { ...s, bpm: bpm ?? 0 } : s)),
@@ -451,23 +627,43 @@ function App() {
     setSimilarGenre("All");
     setPlaylistName("");
     setSelectedTracks([song]);
-    setSimilarMode("library");
+    setSimilarMode(token ? "library" : "discover");
     setPlayingTrackId(null);
+    setSimilarQuery("");
 
-    const bpmRange = 5;
     const matches = libraryTracks.filter(
       (t) =>
         t.id !== song.id &&
         t.bpm &&
         t.bpm !== 0 &&
-        Math.abs(t.bpm - song.bpm) <= bpmRange,
+        Math.abs(t.bpm - song.bpm) <= 10,
     );
     setLibraryMatches(matches);
 
+    // GetSongBPMから取得して先に表示
     const results = await searchByBpm(song.bpm);
     setSimilarTracks(results);
     setIsSimilarLoading(false);
     window.scrollTo(0, 0);
+
+    // バックグラウンドでApple Musicからも取得して追加
+    try {
+      const queries = [song.artist, "K-Pop", "J-Pop", "Hip-Hop"];
+      for (const q of queries) {
+        const appleResults = await searchAppleMusic(q);
+        for (const s of appleResults) {
+          const bpm = await getTrackBpm(s.title, s.artist);
+          if (bpm && Math.abs(bpm - song.bpm) <= 10) {
+            setSimilarTracks((prev) => {
+              if (prev.find((t) => t.id === s.id)) return prev;
+              return [...prev, { ...s, bpm }];
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Apple Music auto-search error:", err);
+    }
   };
 
   const handleBackFromSimilar = () => {
@@ -478,9 +674,28 @@ function App() {
     setPlaylistCreated(false);
     setSimilarMode("library");
     setPlayingTrackId(null);
-    if (musicService === "apple") {
+    setSimilarQuery("");
+    try {
       pauseAppleMusic();
+    } catch {}
+  };
+
+  const handleSimilarSearch = async () => {
+    if (!similarQuery) return;
+    setIsSimilarLoading(true);
+    const results = await searchAppleMusic(similarQuery);
+    const withBpm = [];
+    for (const song of results) {
+      const bpm = await getTrackBpm(song.title, song.artist);
+      if (bpm && selectedSong && Math.abs(bpm - selectedSong.bpm) <= 10) {
+        withBpm.push({ ...song, bpm });
+      }
     }
+    // 検索結果で置き換え
+    setSimilarTracks(withBpm);
+    setSimilarQuery("");
+    setSimilarGenre("All");
+    setIsSimilarLoading(false);
   };
 
   const toggleTrackSelect = (song) => {
@@ -496,24 +711,33 @@ function App() {
     if (selectedTracks.length === 0) return;
     setIsCreatingPlaylist(true);
 
-    if (musicService === "apple") {
+    if (musicService === "apple" && token) {
       try {
-        const trackIds = selectedTracks.map((t) => t.id);
-        await createAppleMusicPlaylist(
-          playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
-          trackIds,
-        );
+        const trackIds = [];
+        for (const track of selectedTracks) {
+          if (/^\d+$/.test(track.id)) {
+            trackIds.push(track.id);
+          } else {
+            const results = await searchAppleMusic(
+              `${track.title} ${track.artist}`,
+            );
+            if (results.length > 0) trackIds.push(results[0].id);
+          }
+        }
+        if (trackIds.length > 0) {
+          await createAppleMusicPlaylist(
+            playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
+            trackIds,
+          );
+        }
       } catch (err) {
         console.error("Apple Music playlist error:", err);
       }
-    } else {
-      if (!token) return;
+    } else if (musicService === "spotify" && token) {
       const playlist = await createPlaylist(
         token,
         playlistName || `TEMPO - BPM ${selectedSong.bpm} Mix`,
       );
-      console.log("作成されたプレイリスト:", playlist);
-
       if (playlist.id) {
         const trackUris = [];
         for (const track of selectedTracks) {
@@ -521,20 +745,11 @@ function App() {
             `${track.title} ${track.artist}`,
             token,
           );
-          console.log("検索結果:", track.title, results.length);
-          if (results.length > 0) {
+          if (results.length > 0)
             trackUris.push(`spotify:track:${results[0].id}`);
-          }
         }
-        console.log("追加するトラック:", trackUris);
-        if (trackUris.length > 0) {
-          const addResult = await addTracksToPlaylist(
-            token,
-            playlist.id,
-            trackUris,
-          );
-          console.log("追加結果:", addResult);
-        }
+        if (trackUris.length > 0)
+          await addTracksToPlaylist(token, playlist.id, trackUris);
       }
     }
 
@@ -543,15 +758,55 @@ function App() {
     setTimeout(() => setPlaylistCreated(false), 3000);
   };
 
+  // ===== Playing tab =====
+  const loadMyPlaylists = async () => {
+    setIsPlaylistLoading(true);
+    if (musicService === "apple") {
+      const playlists = await getMyAppleMusicPlaylists();
+      setMyPlaylists(playlists);
+    } else if (musicService === "spotify" && token) {
+      const playlists = await getMyPlaylists(token);
+      const tempoPlaylists = playlists
+        .filter((pl) => (pl.description || "").includes("Created by TEMPO"))
+        .map((pl) => ({ id: pl.id, name: pl.name }));
+      setMyPlaylists(tempoPlaylists);
+    }
+    setIsPlaylistLoading(false);
+  };
+
+  const handleViewPlaylist = async (playlist) => {
+    setViewingPlaylist(playlist);
+    setIsPlaylistLoading(true);
+    if (musicService === "apple") {
+      const tracks = await getAppleMusicPlaylistTracks(playlist.id);
+      setPlaylistTracks(tracks);
+    } else if (musicService === "spotify" && token) {
+      const items = await getPlaylistTracks(playlist.id, token);
+      const tracks = items
+        .filter((item) => item.track || item.item)
+        .map((item) => {
+          const t = item.track || item.item;
+          return {
+            id: t.id,
+            title: t.name,
+            artist: t.artists[0].name,
+            image: t.album.images[2]?.url,
+          };
+        });
+      setPlaylistTracks(tracks);
+    }
+    setIsPlaylistLoading(false);
+  };
+
   // ===== フィルタリング =====
   const filteredResults = searchResults
     .filter((song) => {
-      if (song.bpm === null) return true;
+      if (song.bpm === null || song.bpm === 0) return true;
       return song.bpm >= minBpm && song.bpm <= maxBpm;
     })
     .sort((a, b) => {
-      if (a.bpm === null) return 1;
-      if (b.bpm === null) return -1;
+      if (a.bpm === null || a.bpm === 0) return 1;
+      if (b.bpm === null || b.bpm === 0) return -1;
       return a.bpm - b.bpm;
     });
 
@@ -568,11 +823,6 @@ function App() {
     .filter((song) => {
       if (song.bpm === null || song.bpm === 0) return true;
       return song.bpm >= minBpm && song.bpm <= maxBpm;
-    })
-    .sort((a, b) => {
-      if (a.bpm === null || a.bpm === 0) return 1;
-      if (b.bpm === null || b.bpm === 0) return -1;
-      return a.bpm - b.bpm;
     });
 
   const displayedTracks =
@@ -584,6 +834,11 @@ function App() {
     (s) => similarGenre === "All" || s.genre === similarGenre,
   );
 
+  // 検索結果のジャンル一覧（Apple Musicのgenre情報を使う）
+  const searchGenres = [
+    ...new Set(searchResults.map((s) => s.genre).filter(Boolean)),
+  ];
+
   const targetBpm = Math.round((minBpm + maxBpm) / 2);
 
   // ===== 再生ボタン =====
@@ -593,17 +848,22 @@ function App() {
         e.stopPropagation();
         if (playingTrackId === song.id) {
           setPlayingTrackId(null);
-          if (musicService === "apple") {
+          try {
             pauseAppleMusic();
-          }
+          } catch {}
           return;
         }
         setPlayingTrackId(song.id);
-        if (musicService === "apple") {
+        if (musicService !== "spotify") {
           try {
-            await playAppleMusicTrack(song.id);
+            await playAppleMusicTrack(
+              song.id,
+              song.title,
+              song.artist,
+              !!token,
+            );
           } catch (err) {
-            console.error("Apple Music play error:", err);
+            console.error("Play error:", err);
           }
         }
       }}
@@ -621,11 +881,10 @@ function App() {
     </button>
   );
 
-  // ===== フローティングコントロール =====
+  // ===== フローティング =====
   const renderFloatingControls = () => {
     const hasEmbed = musicService === "spotify" && playingTrackId;
-    const hasPlaylist = selectedTracks.length > 0;
-
+    const hasPlaylist = selectedTracks.length > 0 && token;
     if (!hasEmbed && !hasPlaylist) return null;
 
     return (
@@ -639,7 +898,6 @@ function App() {
             />
           </div>
         )}
-
         {hasPlaylist && (
           <div className="floating-playlist">
             <div className="search-box" style={{ marginBottom: "8px" }}>
@@ -673,10 +931,14 @@ function App() {
     );
   };
 
-  // ===== プレイリスト作成完了メッセージ =====
-  const renderPlaylistCreatedMessage = () => {
+  const renderPlaylistMessage = () => {
     if (!playlistCreated) return null;
-    const serviceName = musicService === "apple" ? "Apple Music" : "Spotify";
+    const name =
+      musicService === "apple"
+        ? "Apple Music"
+        : musicService === "spotify"
+          ? "Spotify"
+          : "";
     return (
       <div
         style={{
@@ -697,12 +959,13 @@ function App() {
             boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
           }}
         >
-          ✓ {serviceName}にプレイリストを作成しました！
+          ✓ {name}にプレイリストを作成しました！
         </p>
       </div>
     );
   };
 
+<<<<<<< HEAD
   // ===== Play画面: プレイリスト一覧取得 =====
   useEffect(() => {
     if (navTab !== "play" || !token) return;
@@ -934,6 +1197,39 @@ function App() {
     setDragOverIndex(null);
     touchDragIndex.current = null;
   };
+=======
+  // ===== ボトムナビ =====
+  const renderBottomNav = () => (
+    <div className="bottom-nav">
+      <button
+        className={`nav-item ${activeTab === "tracks" ? "active" : ""}`}
+        onClick={() => {
+          setActiveTab("tracks");
+          setViewingPlaylist(null);
+        }}
+      >
+        <span className="nav-icon">≡</span>
+        Tracks
+      </button>
+      {token && (
+        <button
+          className={`nav-item ${activeTab === "playing" ? "active" : ""}`}
+          onClick={() => {
+            setActiveTab("playing");
+            loadMyPlaylists();
+          }}
+        >
+          <span className="nav-icon">▶</span>
+          Playing
+        </button>
+      )}
+      <button className="nav-item">
+        <span className="nav-icon">⚙</span>
+        Settings
+      </button>
+    </div>
+  );
+>>>>>>> dev
 
   // ===== 初期化中 =====
   if (isInitializing) {
@@ -943,6 +1239,174 @@ function App() {
         <p className="section-label" style={{ marginTop: "12px" }}>
           TEMPO
         </p>
+      </div>
+    );
+  }
+
+  // ===== Playing画面 =====
+  if (activeTab === "playing" && token) {
+    return (
+      <div className="app">
+        <div className="app-header">
+          <h1>TEMPO</h1>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#00d672",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            ● 接続済み（ログアウト）
+          </button>
+        </div>
+
+        {!viewingPlaylist ? (
+          <>
+            <p className="section-label">MY PLAYLISTS</p>
+            {isPlaylistLoading && (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                <div className="loading-spinner" />
+              </div>
+            )}
+            {!isPlaylistLoading && myPlaylists.length === 0 && (
+              <div className="glass-card" style={{ textAlign: "center" }}>
+                <p style={{ color: "#888", fontSize: "14px" }}>
+                  TEMPOで作成したプレイリストはまだありません
+                </p>
+              </div>
+            )}
+            <ul className="song-list">
+              {myPlaylists.map((pl) => (
+                <li
+                  key={pl.id}
+                  className="song-item"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    if (musicService === "spotify") {
+                      window.open(
+                        `https://open.spotify.com/playlist/${pl.id}`,
+                        "_blank",
+                      );
+                    } else {
+                      handleViewPlaylist(pl);
+                    }
+                  }}
+                >
+                  <div className="song-info">
+                    <div className="song-title">{pl.name}</div>
+                  </div>
+                  <span style={{ color: "#00d672", fontSize: "13px" }}>
+                    {musicService === "spotify" ? "Spotifyで開く →" : "詳細 →"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => {
+                setViewingPlaylist(null);
+                setPlaylistTracks([]);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#00d672",
+                fontSize: "16px",
+                cursor: "pointer",
+                marginBottom: "12px",
+              }}
+            >
+              ← プレイリスト一覧
+            </button>
+
+            <div className="glass-card">
+              <p className="section-label">{viewingPlaylist.name}</p>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "#888",
+                  marginBottom: "12px",
+                }}
+              >
+                {playlistTracks.length}曲
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                }}
+              >
+                {musicService === "apple" &&
+                  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && (
+                    <a
+                      href="music://"
+                      className="genre-btn active"
+                      style={{
+                        textDecoration: "none",
+                        fontSize: "13px",
+                        padding: "8px 16px",
+                      }}
+                    >
+                      アプリで開く
+                    </a>
+                  )}
+                <a
+                  href={
+                    musicService === "apple"
+                      ? "https://music.apple.com/jp/library/playlists"
+                      : `https://open.spotify.com/playlist/${viewingPlaylist.id}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="genre-btn active"
+                  style={{
+                    textDecoration: "none",
+                    fontSize: "13px",
+                    padding: "8px 16px",
+                  }}
+                >
+                  {musicService === "apple"
+                    ? "Apple Musicで編集"
+                    : "Spotifyで開く"}
+                </a>
+              </div>
+            </div>
+
+            {isPlaylistLoading ? (
+              <div style={{ textAlign: "center", margin: "16px 0" }}>
+                <div className="loading-spinner" />
+              </div>
+            ) : (
+              <ul className="song-list">
+                {playlistTracks.map((track) => (
+                  <li key={track.id} className="song-item">
+                    {track.image && (
+                      <img
+                        src={track.image}
+                        alt=""
+                        style={{ borderRadius: 8, flexShrink: 0 }}
+                      />
+                    )}
+                    <div className="song-info">
+                      <div className="song-title">{track.title}</div>
+                      <div className="song-artist">{track.artist}</div>
+                    </div>
+                    {renderPlayButton(track)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+
+        {renderBottomNav()}
       </div>
     );
   }
@@ -988,64 +1452,88 @@ function App() {
               </div>
             </div>
 
-            <div className="glass-card">
-              <div className="genre-filter">
-                <button
-                  className={`genre-btn ${similarMode === "library" ? "active" : ""}`}
-                  onClick={() => setSimilarMode("library")}
-                >
-                  マイライブラリ
-                </button>
-                <button
-                  className={`genre-btn ${similarMode === "discover" ? "active" : ""}`}
-                  onClick={() => setSimilarMode("discover")}
-                >
-                  オススメ
-                </button>
-              </div>
-            </div>
-
-            {similarMode === "discover" && (
+            {token && (
               <div className="glass-card">
-                <p className="section-label">GENRE</p>
                 <div className="genre-filter">
-                  {["All", ...new Set(similarTracks.map((s) => s.genre))].map(
-                    (genre) => (
-                      <button
-                        key={genre}
-                        className={`genre-btn ${similarGenre === genre ? "active" : ""}`}
-                        onClick={() => setSimilarGenre(genre)}
-                      >
-                        {genre}
-                      </button>
-                    ),
-                  )}
+                  <button
+                    className={`genre-btn ${similarMode === "library" ? "active" : ""}`}
+                    onClick={() => setSimilarMode("library")}
+                  >
+                    マイライブラリ
+                  </button>
+                  <button
+                    className={`genre-btn ${similarMode === "discover" ? "active" : ""}`}
+                    onClick={() => setSimilarMode("discover")}
+                  >
+                    オススメ
+                  </button>
                 </div>
               </div>
             )}
 
+            {(!token || similarMode === "discover") && (
+              <div className="glass-card">
+                <p className="section-label">GENRE</p>
+                <div className="genre-filter">
+                  {[
+                    "All",
+                    ...new Set(
+                      similarTracks.map((s) => s.genre).filter(Boolean),
+                    ),
+                  ].map((genre) => (
+                    <button
+                      key={genre}
+                      className={`genre-btn ${similarGenre === genre ? "active" : ""}`}
+                      onClick={() => setSimilarGenre(genre)}
+                    >
+                      {genre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="glass-card">
+              <p className="section-label">Apple Musicから追加</p>
+              <div className="search-box">
+                <input
+                  type="text"
+                  value={similarQuery}
+                  onChange={(e) => setSimilarQuery(e.target.value)}
+                  placeholder={`BPM ${selectedSong.bpm}±10 の曲を検索`}
+                  onKeyDown={(e) => e.key === "Enter" && handleSimilarSearch()}
+                />
+                <button onClick={handleSimilarSearch} className="search-btn">
+                  検索
+                </button>
+              </div>
+            </div>
+
             <p className="section-label">
-              {similarMode === "library"
+              {token && similarMode === "library"
                 ? `${libraryMatches.length} TRACKS`
                 : `${filteredSimilarTracks.length} TRACKS`}
             </p>
             <ul className="song-list">
-              {(similarMode === "library"
+              {(token && similarMode === "library"
                 ? libraryMatches
                 : filteredSimilarTracks
               ).map((song) => {
-                const isSelected = selectedTracks.find((t) => t.id === song.id);
+                const isSelected =
+                  token && selectedTracks.find((t) => t.id === song.id);
                 return (
                   <li
                     key={song.id}
                     className="song-item"
                     style={{
-                      cursor: "pointer",
+                      cursor: token ? "pointer" : "default",
                       border: isSelected
                         ? "2px solid #00d672"
                         : "1px solid rgba(255, 255, 255, 0.8)",
                     }}
-                    onClick={() => toggleTrackSelect(song)}
+                    onClick={() => {
+                      if (token) toggleTrackSelect(song);
+                    }}
                   >
                     {song.image && (
                       <img
@@ -1068,14 +1556,14 @@ function App() {
                     )}
                     {renderPlayButton(song)}
                     <div
-                      className={`song-bpm-badge ${isSelected ? "" : "match-perfect"}`}
+                      className={`song-bpm-badge ${isSelected ? "" : song.bpm === 0 ? "match-far" : "match-perfect"}`}
                       style={
                         isSelected
                           ? { background: "#00d672", color: "#fff" }
                           : {}
                       }
                     >
-                      {isSelected ? "✓" : song.bpm}
+                      {isSelected ? "✓" : song.bpm === 0 ? "-" : song.bpm}
                     </div>
                   </li>
                 );
@@ -1085,6 +1573,7 @@ function App() {
         )}
 
         {renderFloatingControls()}
+<<<<<<< HEAD
         {renderPlaylistCreatedMessage()}
 
         <div className="bottom-nav">
@@ -1105,6 +1594,10 @@ function App() {
             Settings
           </button>
         </div>
+=======
+        {renderPlaylistMessage()}
+        {renderBottomNav()}
+>>>>>>> dev
       </div>
     );
   }
@@ -1414,40 +1907,7 @@ function App() {
     <div className="app">
       <div className="app-header">
         <h1>TEMPO</h1>
-        {!token ? (
-          <div className="glass-card" style={{ textAlign: "center" }}>
-            <p className="section-label">ログイン</p>
-            <div className="genre-filter" style={{ justifyContent: "center" }}>
-              <button
-                className="genre-btn active"
-                onClick={() => {
-                  localStorage.setItem("music_service", "spotify");
-                  setMusicService("spotify");
-                  loginWithSpotify();
-                }}
-              >
-                Spotify
-              </button>{" "}
-              <button
-                className="genre-btn active"
-                onClick={async () => {
-                  try {
-                    const music = await loginWithAppleMusic();
-                    setAppleMusicInstance(music);
-                    setMusicService("apple");
-                    setToken("apple-music-authorized");
-                    localStorage.setItem("music_service", "apple");
-                  } catch (err) {
-                    console.error("Apple Music login failed:", err);
-                  }
-                }}
-                style={{ background: "#fc3c44" }}
-              >
-                Apple Music
-              </button>{" "}
-            </div>
-          </div>
-        ) : (
+        {token && (
           <button
             onClick={handleLogout}
             style={{
@@ -1463,89 +1923,104 @@ function App() {
         )}
       </div>
 
-      {token && (
-        <>
-          <div className="glass-card">
-            <div className="genre-filter">
+      {!token && (
+        <div className="glass-card" style={{ textAlign: "center" }}>
+          <p className="section-label">アカウント連携</p>
+          <p style={{ fontSize: "13px", color: "#888", marginBottom: "12px" }}>
+            ログインするとマイライブラリやプレイリスト作成が使えます
+          </p>
+          <div className="genre-filter" style={{ justifyContent: "center" }}>
+            {window.location.search.includes("mode=tester") && (
               <button
-                className={`genre-btn ${mode === "library" ? "active" : ""}`}
-                onClick={() => setMode("library")}
-              >
-                マイライブラリ
-              </button>
-              <button
-                className={`genre-btn ${mode === "search" ? "active" : ""}`}
-                onClick={() => setMode("search")}
-              >
-                検索
-              </button>
-            </div>
-          </div>
-
-          {mode === "search" && (
-            <div className="glass-card">
-              <p className="section-label">SEARCH TRACKS</p>
-              <div className="search-box">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="曲名やアーティスト名で検索"
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                />
-                <button onClick={handleSearch} className="search-btn">
-                  検索
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === "library" && (
-            <div className="glass-card">
-              <p className="section-label">MY LIBRARY</p>
-              {isLibraryLoading ? (
-                <div style={{ textAlign: "center", padding: "16px" }}>
-                  <div className="loading-spinner" />
-                  <p
-                    style={{
-                      color: "#888",
-                      marginTop: "8px",
-                      fontSize: "13px",
-                    }}
-                  >
-                    ライブラリを読み込み中...
-                  </p>
-                </div>
-              ) : (
-                <div className="search-box">
-                  <input
-                    type="text"
-                    value={libraryQuery}
-                    onChange={(e) => setLibraryQuery(e.target.value)}
-                    placeholder="ライブラリ内を検索"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {mode === "library" && libraryError && libraryTracks.length === 0 && (
-            <div className="glass-card" style={{ textAlign: "center" }}>
-              <p style={{ color: "#888", fontSize: "14px" }}>{libraryError}</p>
-              <button
-                onClick={() => {
-                  setLibraryError("");
-                  localStorage.removeItem("library_cache");
-                  window.location.reload();
-                }}
                 className="genre-btn active"
-                style={{ marginTop: "12px" }}
+                onClick={() => {
+                  localStorage.setItem("music_service", "spotify");
+                  setMusicService("spotify");
+                  loginWithSpotify();
+                }}
               >
-                再読み込み
+                Spotify
               </button>
+            )}
+            <button
+              className="genre-btn active"
+              onClick={async () => {
+                try {
+                  await loginWithAppleMusic();
+                  setMusicService("apple");
+                  setToken("apple-music-authorized");
+                  localStorage.setItem("music_service", "apple");
+                  setMode("library");
+                } catch (err) {
+                  console.error("Apple Music login failed:", err);
+                }
+              }}
+              style={{ background: "#fc3c44" }}
+            >
+              Apple Music
+            </button>
+          </div>
+        </div>
+      )}
+
+      {token && (
+        <div className="glass-card">
+          <div className="genre-filter">
+            <button
+              className={`genre-btn ${mode === "library" ? "active" : ""}`}
+              onClick={() => setMode("library")}
+            >
+              マイライブラリ
+            </button>
+            <button
+              className={`genre-btn ${mode === "search" ? "active" : ""}`}
+              onClick={() => setMode("search")}
+            >
+              検索
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(mode === "search" || !token) && (
+        <div className="glass-card">
+          <p className="section-label">SEARCH TRACKS</p>
+          <div className="search-box">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="曲名やアーティスト名で検索"
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            />
+            <button onClick={handleSearch} className="search-btn">
+              検索
+            </button>
+          </div>
+        </div>
+      )}
+
+      {token && mode === "library" && (
+        <div className="glass-card">
+          <p className="section-label">MY LIBRARY</p>
+          {isLibraryLoading ? (
+            <div style={{ textAlign: "center", padding: "16px" }}>
+              <div className="loading-spinner" />
+              <p style={{ color: "#888", marginTop: "8px", fontSize: "13px" }}>
+                ライブラリを読み込み中...
+              </p>
+            </div>
+          ) : (
+            <div className="search-box">
+              <input
+                type="text"
+                value={libraryQuery}
+                onChange={(e) => setLibraryQuery(e.target.value)}
+                placeholder="ライブラリ内を検索"
+              />
             </div>
           )}
-        </>
+        </div>
       )}
 
       {isSearching && (
@@ -1558,20 +2033,23 @@ function App() {
       )}
 
       {((mode === "search" && searchResults.length > 0) ||
+        (!token && searchResults.length > 0) ||
         (mode === "library" && libraryTracks.length > 0)) && (
         <>
           <div className="bpm-display">
             <span className="bpm-value">{targetBpm}</span>
             <span className="bpm-label">BPM</span>
           </div>
+
           <BpmFilter
             minBpm={minBpm}
             maxBpm={maxBpm}
             onMinChange={setMinBpm}
             onMaxChange={setMaxBpm}
           />
+
           <p className="section-label">
-            {mode === "search"
+            {mode === "search" || !token
               ? filteredResults.length
               : filteredLibraryTracks.length}{" "}
             TRACKS
@@ -1582,7 +2060,10 @@ function App() {
             )}
           </p>
           <ul className="song-list">
-            {displayedTracks.map((song) => (
+            {(mode === "search" || !token
+              ? filteredResults
+              : displayedTracks
+            ).map((song) => (
               <li
                 key={song.id}
                 className="song-item"
@@ -1617,19 +2098,53 @@ function App() {
               </li>
             ))}
           </ul>
-          {renderFloatingControls()}
-          {mode === "library" &&
-            displayCount < filteredLibraryTracks.length && (
-              <div
-                ref={loadMoreRef}
-                style={{ textAlign: "center", margin: "16px 0" }}
+
+          {(mode === "search" || !token) &&
+            searchResults.length > 0 &&
+            !isSearchingMore && (
+              <button
+                onClick={handleSearchMore}
+                className="genre-btn active"
+                style={{ display: "block", margin: "16px auto" }}
               >
-                <div className="loading-spinner" />
+                もっと検索
+              </button>
+            )}
+
+          {isSearchingMore && (
+            <div style={{ textAlign: "center", margin: "16px 0" }}>
+              <div className="loading-spinner" />
+            </div>
+          )}
+
+          {musicService === "spotify" && playingTrackId && (
+            <div className="floating-controls">
+              <div className="floating-embed">
+                <iframe
+                  src={`https://open.spotify.com/embed/track/${playingTrackId}?theme=0`}
+                  allow="autoplay; clipboard-write; encrypted-media"
+                  loading="lazy"
+                />
               </div>
-            )}{" "}
+            </div>
+          )}
+
+          {mode === "library" &&
+            token &&
+            displayCount < filteredLibraryTracks.length && (
+              <button
+                onClick={() => setDisplayCount((prev) => prev + 50)}
+                className="genre-btn active"
+                style={{ display: "block", margin: "16px auto" }}
+              >
+                もっと見る（残り{filteredLibraryTracks.length - displayCount}
+                曲）
+              </button>
+            )}
         </>
       )}
 
+<<<<<<< HEAD
       <div className="bottom-nav">
         <button className="nav-item">
           <span className="nav-icon">◎</span>
@@ -1648,6 +2163,9 @@ function App() {
           Settings
         </button>
       </div>
+=======
+      {renderBottomNav()}
+>>>>>>> dev
     </div>
   );
 }

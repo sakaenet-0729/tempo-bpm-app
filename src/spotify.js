@@ -11,8 +11,7 @@ const REDIRECT_URI =
 // 「このアプリがアクセスしたい範囲」を指定
 // 今はユーザーの基本情報だけ。曲検索は指定なしでもできる
 const SCOPES =
-  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private";
-
+  "user-read-private user-read-email user-library-read playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private user-top-read";
 function generateRandomString(length) {
   // ランダムな文字列を作る
   // なぜ必要？→ 通信の途中で誰かになりすまされないようにする鍵
@@ -62,23 +61,55 @@ export async function loginWithSpotify() {
 
 export async function getAccessToken() {
   const savedToken = localStorage.getItem("spotify_token");
-  if (savedToken) return savedToken;
+  const tokenExpiry = localStorage.getItem("spotify_token_expiry");
+
+  // トークンが有効期限内なら再利用
+  if (savedToken && tokenExpiry && Date.now() < Number(tokenExpiry)) {
+    return savedToken;
+  }
+
+  // リフレッシュトークンがあれば自動更新
+  const refreshToken = localStorage.getItem("spotify_refresh_token");
+  if (refreshToken) {
+    try {
+      const response = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: CLIENT_ID,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+        }),
+      });
+      const data = await response.json();
+      if (data.access_token) {
+        localStorage.setItem("spotify_token", data.access_token);
+        localStorage.setItem(
+          "spotify_token_expiry",
+          String(Date.now() + (data.expires_in - 60) * 1000),
+        );
+        if (data.refresh_token) {
+          localStorage.setItem("spotify_refresh_token", data.refresh_token);
+        }
+        return data.access_token;
+      }
+    } catch {
+      // リフレッシュ失敗時は通常フローへ
+    }
+  }
 
   const urlParams = new URLSearchParams(window.location.search);
   const code = urlParams.get("code");
 
   if (!code) return null;
 
-  // codeを使ったらURLからすぐ消す（2回使えないから）
   window.history.replaceState({}, document.title, "/");
 
   const codeVerifier = localStorage.getItem("code_verifier");
 
   const response = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
       grant_type: "authorization_code",
@@ -92,6 +123,13 @@ export async function getAccessToken() {
 
   if (data.access_token) {
     localStorage.setItem("spotify_token", data.access_token);
+    localStorage.setItem(
+      "spotify_token_expiry",
+      String(Date.now() + (data.expires_in - 60) * 1000),
+    );
+    if (data.refresh_token) {
+      localStorage.setItem("spotify_refresh_token", data.refresh_token);
+    }
     return data.access_token;
   }
 
@@ -139,20 +177,43 @@ export async function getPlaylistTracks(playlistId, token) {
   try {
     const response = await fetch(
       `https://api.spotify.com/v1/playlists/${playlistId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      },
+      { headers: { Authorization: `Bearer ${token}` } },
     );
     if (!response.ok) return [];
     const data = await response.json();
-    return data.items?.items || data.tracks?.items || [];
+    return data.tracks?.items || [];
   } catch {
     return [];
   }
 }
 
+// APIが生きているか1回だけチェック
+let bpmApiAlive = null;
+export async function checkBpmApi() {
+  if (bpmApiAlive !== null) return bpmApiAlive;
+  const API_KEY = import.meta.env.VITE_GETSONGBPM_API_KEY;
+  if (!API_KEY) {
+    bpmApiAlive = false;
+    return false;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch(
+      `https://api.getsong.co/search/?api_key=${API_KEY}&type=song&lookup=test`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timer);
+    bpmApiAlive = response.status !== 503 && response.status !== 0;
+    return bpmApiAlive;
+  } catch {
+    bpmApiAlive = false;
+    return false;
+  }
+}
+
 // タイムアウト付きfetch（APIサーバーが落ちていても固まらない）
-async function fetchWithTimeout(url, timeoutMs = 8000) {
+async function fetchWithTimeout(url, timeoutMs = 2000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -292,6 +353,7 @@ export async function addTracksToPlaylist(token, playlistId, trackUris) {
   );
   return response.json();
 }
+<<<<<<< HEAD
 // プレイリストの曲一覧取得（ページネーション対応）
 export async function getPlaylistTracksAll(playlistId, token) {
   try {
@@ -311,6 +373,8 @@ export async function getPlaylistTracksAll(playlistId, token) {
     return [];
   }
 }
+=======
+>>>>>>> dev
 
 // プレイリスト名・説明を変更
 export async function renamePlaylist(token, playlistId, name) {
@@ -331,7 +395,10 @@ export async function renamePlaylist(token, playlistId, name) {
 // プレイリストから曲を削除
 export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
   const body = { tracks: trackUris.map((uri) => ({ uri })) };
+<<<<<<< HEAD
   console.log("DELETE body:", JSON.stringify(body));
+=======
+>>>>>>> dev
   const response = await fetch(
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
     {
@@ -345,7 +412,11 @@ export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
   );
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
+<<<<<<< HEAD
     console.error("削除APIエラー:", response.status, err);
+=======
+    console.error("Delete API error:", response.status, err);
+>>>>>>> dev
   }
   return response.ok;
 }
@@ -375,6 +446,29 @@ export async function reorderPlaylistTracks(
   return response.ok;
 }
 
+<<<<<<< HEAD
+=======
+// 最近再生した曲を取得（Top Tracksの代替）
+export async function getRecentlyPlayed(token) {
+  try {
+    const response = await fetch(
+      "https://api.spotify.com/v1/me/player/recently-played?limit=50",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (response.status === 401) {
+      localStorage.removeItem("spotify_token");
+      window.location.reload();
+      return { items: [] };
+    }
+    if (!response.ok) return { items: [] };
+    const data = await response.json();
+    return data;
+  } catch {
+    return { items: [] };
+  }
+}
+
+>>>>>>> dev
 export async function getMyTopTracks(token, offset = 0) {
   try {
     const response = await fetch(

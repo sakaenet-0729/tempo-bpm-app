@@ -1,4 +1,5 @@
 let cachedToken = null;
+let previewAudio = null;
 
 export async function getAppleMusicToken() {
   if (cachedToken) return cachedToken;
@@ -15,9 +16,8 @@ export async function getAppleMusicToken() {
   return data.token;
 }
 
-export async function loginWithAppleMusic() {
+export async function initAppleMusic() {
   const token = await getAppleMusicToken();
-
   await MusicKit.configure({
     developerToken: token,
     app: {
@@ -25,26 +25,32 @@ export async function loginWithAppleMusic() {
       build: "1.0.0",
     },
   });
+  return MusicKit.getInstance();
+}
 
-  const music = MusicKit.getInstance();
+export async function loginWithAppleMusic() {
+  const music = await initAppleMusic();
   await music.authorize();
   return music;
 }
 
-export async function searchAppleMusic(query) {
-  const music = MusicKit.getInstance();
-  const result = await music.api.music(`/v1/catalog/jp/search`, {
-    term: query,
-    types: "songs",
-    limit: 10,
-  });
-
-  if (result.data.results?.songs?.data) {
-    return result.data.results.songs.data.map((song) => ({
+export async function searchAppleMusic(query, offset = 0) {
+  const token = await getAppleMusicToken();
+  const response = await fetch(
+    `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(query)}&types=songs&limit=25&offset=${offset}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  const data = await response.json();
+  if (data.results?.songs?.data) {
+    return data.results.songs.data.map((song) => ({
       id: song.id,
       title: song.attributes.name,
       artist: song.attributes.artistName,
       bpm: null,
+      genre: song.attributes.genreNames?.[0] || null,
+      previewUrl: song.attributes.previews?.[0]?.url || null,
       image: song.attributes.artwork?.url
         ?.replace("{w}", "64")
         ?.replace("{h}", "64"),
@@ -53,19 +59,62 @@ export async function searchAppleMusic(query) {
   return [];
 }
 
-export async function getAppleMusicLibrary() {
+export async function getAppleMusicLibrary(offset = 0, limit = 20) {
   const music = MusicKit.getInstance();
-  let allTracks = [];
-  let offset = 0;
-  const limit = 100;
-
-  while (true) {
+  try {
     const result = await music.api.music(
-      `/v1/me/library/songs?limit=${limit}&offset=${offset}`,
+      `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`,
     );
-
     if (result.data.data && result.data.data.length > 0) {
-      const tracks = result.data.data.map((song) => ({
+      return {
+        tracks: result.data.data.map((song) => ({
+          id: song.id,
+          title: song.attributes.name,
+          artist: song.attributes.artistName,
+          bpm: null,
+          image: song.attributes.artwork?.url
+            ?.replace("{w}", "64")
+            ?.replace("{h}", "64"),
+        })),
+        hasMore: result.data.data.length === limit,
+      };
+    }
+  } catch (err) {
+    if (err.toString().includes("403")) {
+      try {
+        await music.authorize();
+        const result = await music.api.music(
+          `/v1/me/library/songs?limit=${limit}&offset=${offset}&sort=-dateAdded`,
+        );
+        if (result.data.data && result.data.data.length > 0) {
+          return {
+            tracks: result.data.data.map((song) => ({
+              id: song.id,
+              title: song.attributes.name,
+              artist: song.attributes.artistName,
+              bpm: null,
+              image: song.attributes.artwork?.url
+                ?.replace("{w}", "64")
+                ?.replace("{h}", "64"),
+            })),
+            hasMore: result.data.data.length === limit,
+          };
+        }
+      } catch {}
+    }
+    console.warn("Apple Music library error:", err);
+  }
+  return { tracks: [], hasMore: false };
+}
+
+export async function getAppleMusicRecentlyPlayed() {
+  const music = MusicKit.getInstance();
+  try {
+    const result = await music.api.music(
+      "/v1/me/recent/played/tracks?limit=20",
+    );
+    if (result.data.data) {
+      return result.data.data.map((song) => ({
         id: song.id,
         title: song.attributes.name,
         artist: song.attributes.artistName,
@@ -74,27 +123,96 @@ export async function getAppleMusicLibrary() {
           ?.replace("{w}", "64")
           ?.replace("{h}", "64"),
       }));
-      allTracks = [...allTracks, ...tracks];
-      offset += limit;
-
-      if (result.data.data.length < limit) break;
-    } else {
-      break;
     }
+    return [];
+  } catch (err) {
+    if (err.toString().includes("403")) {
+      try {
+        await music.authorize();
+        const result = await music.api.music(
+          "/v1/me/recent/played/tracks?limit=20",
+        );
+        if (result.data.data) {
+          return result.data.data.map((song) => ({
+            id: song.id,
+            title: song.attributes.name,
+            artist: song.attributes.artistName,
+            bpm: null,
+            image: song.attributes.artwork?.url
+              ?.replace("{w}", "64")
+              ?.replace("{h}", "64"),
+          }));
+        }
+      } catch {}
+    }
+    return [];
   }
-
-  return allTracks;
 }
 
-export async function playAppleMusicTrack(songId) {
-  const music = MusicKit.getInstance();
-  await music.setQueue({ song: songId });
-  await music.play();
+export async function playAppleMusicTrack(songId, title, artist, isLoggedIn) {
+  // ログイン済み → MusicKit再生
+  if (isLoggedIn) {
+    const music = MusicKit.getInstance();
+    // 曲名+アーティスト名でJPカタログを検索して再生
+    if (title && artist) {
+      try {
+        const token = await getAppleMusicToken();
+        const response = await fetch(
+          `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(title + " " + artist)}&types=songs&limit=1`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const data = await response.json();
+        const jpId = data.results?.songs?.data?.[0]?.id;
+        if (jpId) {
+          await music.setQueue({ song: jpId, startPlaying: true });
+          return;
+        }
+      } catch {}
+    }
+    // フォールバック
+    try {
+      await music.setQueue({ song: songId, startPlaying: true });
+    } catch (err) {
+      console.error("Play failed:", songId, err);
+    }
+    return;
+  }
+
+  // ログインなし → プレビューURL再生（30秒）
+  stopPreview();
+  try {
+    const token = await getAppleMusicToken();
+    const response = await fetch(
+      `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(title + " " + artist)}&types=songs&limit=1`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const data = await response.json();
+    const previewUrl =
+      data.results?.songs?.data?.[0]?.attributes?.previews?.[0]?.url;
+    if (previewUrl) {
+      previewAudio = new Audio(previewUrl);
+      previewAudio.play();
+      return;
+    }
+  } catch {}
+  console.error("Preview not available for:", title);
 }
 
 export function pauseAppleMusic() {
-  const music = MusicKit.getInstance();
-  music.pause();
+  // MusicKit停止
+  try {
+    const music = MusicKit.getInstance();
+    music.pause();
+  } catch {}
+  // プレビュー停止
+  stopPreview();
+}
+
+function stopPreview() {
+  if (previewAudio) {
+    previewAudio.pause();
+    previewAudio = null;
+  }
 }
 
 export async function createAppleMusicPlaylist(name, trackIds) {
@@ -124,25 +242,55 @@ export async function createAppleMusicPlaylist(name, trackIds) {
   );
   return response;
 }
-export async function getAppleMusicRecentlyPlayed() {
+
+export async function getMyAppleMusicPlaylists() {
+  const music = MusicKit.getInstance();
   try {
-    const music = MusicKit.getInstance();
-    const result = await music.api.music("/v1/me/recent/played/tracks", {
-      limit: 50,
-    });
+    const result = await music.api.music("/v1/me/library/playlists?limit=50");
     if (result.data.data) {
-      return result.data.data.map((song) => ({
+      return result.data.data
+        .filter((pl) => {
+          const desc = pl.attributes.description;
+          if (!desc) return false;
+          if (typeof desc === "string")
+            return desc.includes("Created by TEMPO");
+          if (typeof desc === "object" && desc.standard)
+            return desc.standard.includes("Created by TEMPO");
+          return false;
+        })
+        .map((pl) => ({
+          id: pl.id,
+          name: pl.attributes.name,
+        }));
+    }
+    return [];
+  } catch (err) {
+    console.error("Get playlists error:", err);
+    return [];
+  }
+}
+
+export async function getAppleMusicPlaylistTracks(playlistId) {
+  const music = MusicKit.getInstance();
+  try {
+    const result = await music.api.music(
+      `/v1/me/library/playlists/${playlistId}`,
+      { include: "tracks" },
+    );
+    const tracks = result.data.data?.[0]?.relationships?.tracks?.data;
+    if (tracks) {
+      return tracks.map((song) => ({
         id: song.id,
         title: song.attributes.name,
         artist: song.attributes.artistName,
-        bpm: null,
         image: song.attributes.artwork?.url
           ?.replace("{w}", "64")
           ?.replace("{h}", "64"),
       }));
     }
     return [];
-  } catch {
+  } catch (err) {
+    console.error("Get playlist tracks error:", err);
     return [];
   }
 }
