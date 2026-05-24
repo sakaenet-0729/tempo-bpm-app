@@ -663,23 +663,7 @@ function App() {
         setPlayingTrackId(song.id);
         if (musicService !== "spotify") {
           try {
-            if (/^\d+$/.test(song.id)) {
-              try {
-                await playAppleMusicTrack(song.id);
-              } catch {
-                // IDで再生失敗→曲名で検索して再生
-                const results = await searchAppleMusic(
-                  `${song.title} ${song.artist}`,
-                );
-                if (results.length > 0)
-                  await playAppleMusicTrack(results[0].id);
-              }
-            } else {
-              const results = await searchAppleMusic(
-                `${song.title} ${song.artist}`,
-              );
-              if (results.length > 0) await playAppleMusicTrack(results[0].id);
-            }
+            await playAppleMusicTrack(song.id, song.title, song.artist);
           } catch (err) {
             console.error("Play error:", err);
           }

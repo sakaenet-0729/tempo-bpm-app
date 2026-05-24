@@ -147,32 +147,31 @@ export async function getAppleMusicRecentlyPlayed() {
   }
 }
 
-export async function playAppleMusicTrack(songId) {
+export async function playAppleMusicTrack(songId, title, artist) {
   const music = MusicKit.getInstance();
+
+  // 曲名+アーティスト名でJPカタログを検索して再生
+  if (title && artist) {
+    try {
+      const token = await getAppleMusicToken();
+      const response = await fetch(
+        `https://api.music.apple.com/v1/catalog/jp/search?term=${encodeURIComponent(title + " " + artist)}&types=songs&limit=1`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const data = await response.json();
+      const jpId = data.results?.songs?.data?.[0]?.id;
+      if (jpId) {
+        await music.setQueue({ song: jpId, startPlaying: true });
+        return;
+      }
+    } catch {}
+  }
+
+  // フォールバック：IDで直接試行
   try {
     await music.setQueue({ song: songId, startPlaying: true });
   } catch (err) {
-    // storefrontエラーの場合、曲情報を取得して再試行
-    if (
-      err.toString().includes("CONTENT_EQUIVALENT") ||
-      err.toString().includes("NOT_FOUND")
-    ) {
-      try {
-        const storefront = music.storefrontId || "jp";
-        const result = await music.api.music(
-          `/v1/catalog/${storefront}/songs/${songId}`,
-        );
-        if (result.data.data?.[0]) {
-          await music.setQueue({
-            song: result.data.data[0].id,
-            startPlaying: true,
-          });
-        }
-      } catch {
-        // それでもダメなら諦める
-        console.error("Play failed for:", songId);
-      }
-    }
+    console.error("Play failed:", songId, err);
   }
 }
 
