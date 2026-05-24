@@ -612,8 +612,8 @@ function App() {
       return song.bpm >= minBpm && song.bpm <= maxBpm;
     })
     .sort((a, b) => {
-      if (a.bpm === null) return 1;
-      if (b.bpm === null) return -1;
+      if (a.bpm === null || a.bpm === 0) return 1;
+      if (b.bpm === null || b.bpm === 0) return -1;
       return a.bpm - b.bpm;
     });
 
@@ -663,9 +663,17 @@ function App() {
         setPlayingTrackId(song.id);
         if (musicService !== "spotify") {
           try {
-            // Apple MusicのIDは数字のみ、GetSongBPMのIDは英数字混在
             if (/^\d+$/.test(song.id)) {
-              await playAppleMusicTrack(song.id);
+              try {
+                await playAppleMusicTrack(song.id);
+              } catch {
+                // IDで再生失敗→曲名で検索して再生
+                const results = await searchAppleMusic(
+                  `${song.title} ${song.artist}`,
+                );
+                if (results.length > 0)
+                  await playAppleMusicTrack(results[0].id);
+              }
             } else {
               const results = await searchAppleMusic(
                 `${song.title} ${song.artist}`,
