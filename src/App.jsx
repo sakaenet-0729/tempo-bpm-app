@@ -1231,40 +1231,16 @@ function App() {
 
       {(mode === "search" || !token) && (
         <div className="glass-card">
+          <p className="section-label">SEARCH TRACKS</p>
           <div className="search-box">
             <input
               type="text"
-              value={similarQuery}
-              onChange={(e) => setSimilarQuery(e.target.value)}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="曲名やアーティスト名で検索"
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
-            <button
-              onClick={async () => {
-                if (!similarQuery) return;
-                setIsSimilarLoading(true);
-                const results = await searchAppleMusic(similarQuery);
-                const withBpm = [];
-                for (const song of results) {
-                  const bpm = await getTrackBpm(song.title, song.artist);
-                  if (
-                    bpm &&
-                    selectedSong &&
-                    Math.abs(bpm - selectedSong.bpm) <= 10
-                  ) {
-                    withBpm.push({ ...song, bpm });
-                  }
-                }
-                setSimilarTracks((prev) => {
-                  const existingIds = new Set(prev.map((t) => t.id));
-                  const newTracks = withBpm.filter(
-                    (t) => !existingIds.has(t.id),
-                  );
-                  return [...prev, ...newTracks];
-                });
-                setIsSimilarLoading(false);
-              }}
-              className="search-btn"
-            >
+            <button onClick={handleSearch} className="search-btn">
               検索
             </button>
           </div>
