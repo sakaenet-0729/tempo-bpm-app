@@ -23,6 +23,7 @@ export async function initAppleMusic() {
       name: "TEMPO",
       build: "1.0.0",
     },
+    storefrontId: "jp",
   });
   return MusicKit.getInstance();
 }
@@ -149,8 +150,7 @@ export async function getAppleMusicRecentlyPlayed() {
 
 export async function playAppleMusicTrack(songId) {
   const music = MusicKit.getInstance();
-  await music.setQueue({ song: songId });
-  await music.play();
+  await music.setQueue({ song: songId, startPlaying: true });
 }
 
 export function pauseAppleMusic() {
