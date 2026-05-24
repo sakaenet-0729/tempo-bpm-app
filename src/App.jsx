@@ -1037,6 +1037,35 @@ function App() {
                   placeholder="曲名やアーティスト名で絞り込み"
                 />
               </div>
+              {similarQuery && filteredSimilarTracks.length === 0 && (
+                <button
+                  onClick={async () => {
+                    setIsSimilarLoading(true);
+                    const results = await searchAppleMusic(similarQuery);
+                    const withBpm = [];
+                    for (const song of results) {
+                      const bpm = await getTrackBpm(song.title, song.artist);
+                      withBpm.push({ ...song, bpm: bpm ?? 0 });
+                    }
+                    setSimilarTracks((prev) => {
+                      const existingIds = new Set(prev.map((t) => t.id));
+                      const newTracks = withBpm.filter(
+                        (t) => !existingIds.has(t.id),
+                      );
+                      return [...prev, ...newTracks];
+                    });
+                    setIsSimilarLoading(false);
+                  }}
+                  className="genre-btn active"
+                  style={{
+                    display: "block",
+                    margin: "8px auto 0",
+                    fontSize: "13px",
+                  }}
+                >
+                  Apple Musicで「{similarQuery}」を検索
+                </button>
+              )}
             </div>
 
             <p className="section-label">
