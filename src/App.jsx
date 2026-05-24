@@ -463,16 +463,33 @@ function App() {
   };
 
   const handleSimilarSearch = async () => {
+    console.log(
+      "handleSimilarSearch called:",
+      similarQuery,
+      "baseBPM:",
+      selectedSong?.bpm,
+    );
     if (!similarQuery) return;
     setIsSimilarLoading(true);
     const results = await searchAppleMusic(similarQuery);
+    console.log("Apple Music results:", results.length);
     const withBpm = [];
     for (const song of results) {
       const bpm = await getTrackBpm(song.title, song.artist);
+      console.log(
+        song.title,
+        "BPM:",
+        bpm,
+        "range:",
+        selectedSong?.bpm - 10,
+        "-",
+        selectedSong?.bpm + 10,
+      );
       if (bpm && selectedSong && Math.abs(bpm - selectedSong.bpm) <= 10) {
         withBpm.push({ ...song, bpm });
       }
     }
+    console.log("BPM範囲内:", withBpm.length);
     setSimilarTracks((prev) => {
       const existingIds = new Set(prev.map((t) => t.id));
       const newTracks = withBpm.filter((t) => !existingIds.has(t.id));
