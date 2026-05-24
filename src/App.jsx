@@ -522,7 +522,7 @@ function App() {
       try {
         const trackIds = [];
         for (const track of selectedTracks) {
-          if (track.id && track.id.length > 10) {
+          if (/^\d+$/.test(track.id)) {
             trackIds.push(track.id);
           } else {
             const results = await searchAppleMusic(
@@ -663,7 +663,8 @@ function App() {
         setPlayingTrackId(song.id);
         if (musicService !== "spotify") {
           try {
-            if (song.id && song.id.length > 10) {
+            // Apple MusicのIDは数字のみ、GetSongBPMのIDは英数字混在
+            if (/^\d+$/.test(song.id)) {
               await playAppleMusicTrack(song.id);
             } else {
               const results = await searchAppleMusic(
