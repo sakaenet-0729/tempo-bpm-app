@@ -469,15 +469,10 @@ function App() {
     const withBpm = [];
     for (const song of results) {
       const bpm = await getTrackBpm(song.title, song.artist);
-      if (bpm === null || (bpm && Math.abs(bpm - selectedSong.bpm) <= 10)) {
-        withBpm.push({ ...song, bpm: bpm ?? 0 });
-      }
+      withBpm.push({ ...song, bpm: bpm ?? 0 });
     }
-    setSimilarTracks((prev) => {
-      const existingIds = new Set(prev.map((t) => t.id));
-      const newTracks = withBpm.filter((t) => !existingIds.has(t.id));
-      return [...prev, ...newTracks];
-    });
+    // 既存の結果に追加ではなく、検索結果で置き換え
+    setSimilarTracks(withBpm);
     setSimilarQuery("");
     setSimilarGenre("All");
     setIsSimilarLoading(false);
