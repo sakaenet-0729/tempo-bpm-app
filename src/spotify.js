@@ -353,28 +353,6 @@ export async function addTracksToPlaylist(token, playlistId, trackUris) {
   );
   return response.json();
 }
-<<<<<<< HEAD
-// プレイリストの曲一覧取得（ページネーション対応）
-export async function getPlaylistTracksAll(playlistId, token) {
-  try {
-    let allItems = [];
-    let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
-    while (url) {
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) break;
-      const data = await response.json();
-      allItems = [...allItems, ...(data.items || [])];
-      url = data.next || null;
-    }
-    return allItems;
-  } catch {
-    return [];
-  }
-}
-=======
->>>>>>> dev
 
 // プレイリスト名・説明を変更
 export async function renamePlaylist(token, playlistId, name) {
@@ -395,10 +373,6 @@ export async function renamePlaylist(token, playlistId, name) {
 // プレイリストから曲を削除
 export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
   const body = { tracks: trackUris.map((uri) => ({ uri })) };
-<<<<<<< HEAD
-  console.log("DELETE body:", JSON.stringify(body));
-=======
->>>>>>> dev
   const response = await fetch(
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
     {
@@ -412,11 +386,7 @@ export async function removeTracksFromPlaylist(token, playlistId, trackUris) {
   );
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-<<<<<<< HEAD
-    console.error("削除APIエラー:", response.status, err);
-=======
     console.error("Delete API error:", response.status, err);
->>>>>>> dev
   }
   return response.ok;
 }
@@ -446,8 +416,6 @@ export async function reorderPlaylistTracks(
   return response.ok;
 }
 
-<<<<<<< HEAD
-=======
 // 最近再生した曲を取得（Top Tracksの代替）
 export async function getRecentlyPlayed(token) {
   try {
@@ -468,7 +436,6 @@ export async function getRecentlyPlayed(token) {
   }
 }
 
->>>>>>> dev
 export async function getMyTopTracks(token, offset = 0) {
   try {
     const response = await fetch(
