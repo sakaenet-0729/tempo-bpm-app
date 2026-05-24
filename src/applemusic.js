@@ -24,15 +24,12 @@ export async function initAppleMusic() {
       build: "1.0.0",
     },
   });
-  const music = MusicKit.getInstance();
-  music.storefrontId = "jp";
-  return music;
+  return MusicKit.getInstance();
 }
 
 export async function loginWithAppleMusic() {
   const music = await initAppleMusic();
   await music.authorize();
-  music.storefrontId = "jp";
   return music;
 }
 
@@ -152,7 +149,31 @@ export async function getAppleMusicRecentlyPlayed() {
 
 export async function playAppleMusicTrack(songId) {
   const music = MusicKit.getInstance();
-  await music.setQueue({ song: songId, startPlaying: true });
+  try {
+    await music.setQueue({ song: songId, startPlaying: true });
+  } catch (err) {
+    // storefrontエラーの場合、曲情報を取得して再試行
+    if (
+      err.toString().includes("CONTENT_EQUIVALENT") ||
+      err.toString().includes("NOT_FOUND")
+    ) {
+      try {
+        const storefront = music.storefrontId || "jp";
+        const result = await music.api.music(
+          `/v1/catalog/${storefront}/songs/${songId}`,
+        );
+        if (result.data.data?.[0]) {
+          await music.setQueue({
+            song: result.data.data[0].id,
+            startPlaying: true,
+          });
+        }
+      } catch {
+        // それでもダメなら諦める
+        console.error("Play failed for:", songId);
+      }
+    }
+  }
 }
 
 export function pauseAppleMusic() {
