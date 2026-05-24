@@ -360,7 +360,6 @@ function App() {
 
   const handleSearch = async () => {
     if (!searchQuery) return;
-    setMode("search");
     setIsSearching(true);
     setPlayingTrackId(null);
     setSearchOffset(0);
@@ -450,14 +449,17 @@ function App() {
 
     // バックグラウンドでApple Musicからも取得して追加
     try {
-      const appleResults = await searchAppleMusic(song.artist);
-      for (const s of appleResults) {
-        const bpm = await getTrackBpm(s.title, s.artist);
-        if (bpm === null || (bpm && Math.abs(bpm - song.bpm) <= 10)) {
-          setSimilarTracks((prev) => {
-            if (prev.find((t) => t.id === s.id)) return prev;
-            return [...prev, { ...s, bpm: bpm ?? 0 }];
-          });
+      const queries = [song.artist, "K-Pop", "J-Pop", "Hip-Hop"];
+      for (const q of queries) {
+        const appleResults = await searchAppleMusic(q);
+        for (const s of appleResults) {
+          const bpm = await getTrackBpm(s.title, s.artist);
+          if (bpm && Math.abs(bpm - song.bpm) <= 10) {
+            setSimilarTracks((prev) => {
+              if (prev.find((t) => t.id === s.id)) return prev;
+              return [...prev, { ...s, bpm }];
+            });
+          }
         }
       }
     } catch (err) {
@@ -486,9 +488,11 @@ function App() {
     const withBpm = [];
     for (const song of results) {
       const bpm = await getTrackBpm(song.title, song.artist);
-      withBpm.push({ ...song, bpm: bpm ?? 0 });
+      if (bpm && selectedSong && Math.abs(bpm - selectedSong.bpm) <= 10) {
+        withBpm.push({ ...song, bpm });
+      }
     }
-    // 既存の結果に追加ではなく、検索結果で置き換え
+    // 検索結果で置き換え
     setSimilarTracks(withBpm);
     setSimilarQuery("");
     setSimilarGenre("All");
@@ -1226,16 +1230,40 @@ function App() {
 
       {(mode === "search" || !token) && (
         <div className="glass-card">
-          <p className="section-label">SEARCH TRACKS</p>
           <div className="search-box">
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={similarQuery}
+              onChange={(e) => setSimilarQuery(e.target.value)}
               placeholder="曲名やアーティスト名で検索"
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
-            <button onClick={handleSearch} className="search-btn">
+            <button
+              onClick={async () => {
+                if (!similarQuery) return;
+                setIsSimilarLoading(true);
+                const results = await searchAppleMusic(similarQuery);
+                const withBpm = [];
+                for (const song of results) {
+                  const bpm = await getTrackBpm(song.title, song.artist);
+                  if (
+                    bpm &&
+                    selectedSong &&
+                    Math.abs(bpm - selectedSong.bpm) <= 10
+                  ) {
+                    withBpm.push({ ...song, bpm });
+                  }
+                }
+                setSimilarTracks((prev) => {
+                  const existingIds = new Set(prev.map((t) => t.id));
+                  const newTracks = withBpm.filter(
+                    (t) => !existingIds.has(t.id),
+                  );
+                  return [...prev, ...newTracks];
+                });
+                setIsSimilarLoading(false);
+              }}
+              className="search-btn"
+            >
               検索
             </button>
           </div>
